@@ -1,0 +1,441 @@
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { formatDistanceToNow } from "date-fns";
+import { toast } from "sonner";
+import { Loader2, Radio, Settings as SettingsIcon, BellRing, Lock, LockOpen, ShieldAlert } from "lucide-react";
+import { api } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import AdminLayout from "@/components/AdminLayout";
+import { useApp } from "@/context/AppContext";
+
+// The scraper's Puppeteer sources are hard-coded to La Liga's pages (Flashscore/Livescore/
+// BBC Sport) — this only labels the weeks it creates, so it's constrained to the one value
+// that actually matches what gets scraped rather than free text that could drift out of sync.
+const COMPETITIONS = ["La Liga"];
+
+const AdminSettings = () => {
+  const queryClient = useQueryClient();
+  const { currentUser } = useApp();
+
+  const [enabled, setEnabled] = useState(true);
+  const [pollIntervalSeconds, setPollIntervalSeconds] = useState(60);
+  const [competition, setCompetition] = useState("");
+  const [sourceName, setSourceName] = useState("Flashscore");
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderHoursBeforeFirstGame, setReminderHoursBeforeFirstGame] = useState(24);
+  const [seeded, setSeeded] = useState(false);
+
+  const { data: settings, isLoading, error } = useQuery({
+    queryKey: ["admin-settings"],
+    queryFn: api.admin.getSettings,
+    enabled: currentUser?.role === "admin",
+  });
+
+  const { data: status } = useQuery({
+    queryKey: ["admin-status"],
+    queryFn: api.admin.status,
+    refetchInterval: 10_000,
+    enabled: currentUser?.role === "admin",
+  });
+
+  const { data: auditLogSettings } = useQuery({
+    queryKey: ["audit-log-settings"],
+    queryFn: api.admin.auditLogSettings.get,
+    enabled: currentUser?.isSystemUser === true,
+  });
+
+  useEffect(() => {
+    if (!settings || seeded) return;
+    setEnabled(settings.enabled);
+    setPollIntervalSeconds(settings.pollIntervalSeconds);
+    setCompetition(settings.competition);
+    setSourceName(settings.sourceName);
+    setReminderEnabled(settings.reminderEnabled);
+    setReminderHoursBeforeFirstGame(settings.reminderHoursBeforeFirstGame);
+    setSeeded(true);
+  }, [settings, seeded]);
+
+  const { mutate: save, isPending: isSaving } = useMutation({
+    mutationFn: () =>
+      api.admin.updateSettings({
+        enabled,
+        pollIntervalSeconds,
+        competition,
+        sourceName,
+        reminderEnabled,
+        reminderHoursBeforeFirstGame,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-status"] });
+      toast.success("Settings saved.");
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to save settings.");
+    },
+  });
+
+  const { mutate: setLock, isPending: isLocking } = useMutation({
+    mutationFn: (locked: boolean) => api.admin.setPredictionsLock(locked),
+    onSuccess: (_, locked) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-status"] });
+      toast.success(locked ? "Predictions locked for everyone." : "Predictions unlocked.");
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to update the predictions lock.");
+    },
+  });
+
+  const { mutate: setAuditLogEnabled, isPending: isSavingAuditLog } = useMutation({
+    mutationFn: (enabled: boolean) => api.admin.auditLogSettings.set(enabled),
+    onSuccess: (_, enabled) => {
+      queryClient.invalidateQueries({ queryKey: ["audit-log-settings"] });
+      toast.success(enabled ? "Audit logging turned back on." : "Audit logging turned off.");
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to update audit logging.");
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AdminLayout>
+        <div className="mx-auto max-w-2xl px-4 pt-12">
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-center">
+            <p className="text-sm text-destructive font-medium">Failed to load admin settings</p>
+            <p className="text-xs text-destructive/80 mt-1">
+              {error instanceof Error ? error.message : "Unknown error"}
+            </p>
+          </div>
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  const intervalValid = pollIntervalSeconds >= 15 && pollIntervalSeconds <= 3600;
+  const competitionValid = competition.trim().length > 0;
+  const reminderHoursValid = reminderHoursBeforeFirstGame >= 1 && reminderHoursBeforeFirstGame <= 336;
+  const canSave = intervalValid && competitionValid && reminderHoursValid && !isSaving;
+
+  return (
+    <AdminLayout>
+      <div className="mx-auto max-w-2xl px-4 pt-6 pb-8 space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">Settings</h1>
+          <p className="text-sm text-muted-foreground">Configure the live score scraper</p>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Radio className="h-4 w-4 text-primary" />
+            <span className="text-sm font-semibold">Scraper status</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">State</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded font-medium ${
+                status?.scraperEnabled ? "bg-success/20 text-success" : "bg-secondary text-muted-foreground"
+              }`}
+            >
+              {status?.scraperEnabled ? "Running" : "Paused"}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Last scraped</span>
+            <span>
+              {status?.lastScrapedAt
+                ? formatDistanceToNow(new Date(status.lastScrapedAt), { addSuffix: true })
+                : "Never"}
+            </span>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <SettingsIcon className="h-4 w-4 text-primary" />
+            <span className="text-sm font-semibold">Scraper settings</span>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="scraper-enabled">Enabled</Label>
+              <p className="text-xs text-muted-foreground">Pause to stop polling without redeploying</p>
+            </div>
+            <Switch id="scraper-enabled" checked={enabled} onCheckedChange={setEnabled} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="poll-interval">Poll interval (seconds)</Label>
+            <Input
+              id="poll-interval"
+              type="number"
+              min={15}
+              max={3600}
+              value={pollIntervalSeconds}
+              onChange={(e) => setPollIntervalSeconds(Number(e.target.value))}
+              className="bg-secondary border-border"
+            />
+            {!intervalValid && <p className="text-xs text-destructive">Must be between 15 and 3600 seconds.</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="competition">Competition</Label>
+            <Select value={competition} onValueChange={setCompetition}>
+              <SelectTrigger id="competition" className="bg-secondary border-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {COMPETITIONS.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Only La Liga is currently supported by the live scraper.</p>
+            {!competitionValid && <p className="text-xs text-destructive">Required.</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="source">Live score source</Label>
+            <Select value={sourceName} onValueChange={setSourceName}>
+              <SelectTrigger id="source" className="bg-secondary border-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(settings?.availableSources ?? [sourceName]).map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Only one source is scraped at a time — no fallback between sites. Flashscore is required to create
+              new match weeks; the others are score/status fallbacks and best used only if Flashscore is blocked.
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <Lock className="h-4 w-4 text-primary" />
+            <span className="text-sm font-semibold">Predictions</span>
+          </div>
+
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">State</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded font-medium ${
+                settings?.predictionsLocked ? "bg-destructive/20 text-destructive" : "bg-success/20 text-success"
+              }`}
+            >
+              {settings?.predictionsLocked ? "Locked" : "Open"}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Locking stops every user from submitting or changing predictions immediately, regardless of each
+            week's kickoff countdown. This takes effect right away — it doesn't require saving settings below.
+          </p>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant={settings?.predictionsLocked ? "outline" : "destructive"}
+                className="w-full"
+                disabled={isLocking}
+              >
+                {isLocking && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {settings?.predictionsLocked ? (
+                  <>
+                    <LockOpen className="h-4 w-4 mr-2" /> Unlock predictions
+                  </>
+                ) : (
+                  <>
+                    <Lock className="h-4 w-4 mr-2" /> Lock all predictions
+                  </>
+                )}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {settings?.predictionsLocked ? "Unlock predictions?" : "Lock all predictions?"}
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {settings?.predictionsLocked
+                    ? "Users will be able to submit or change predictions again, subject to each week's normal kickoff lock."
+                    : "No user will be able to submit or change a prediction until you unlock this, even for weeks that haven't kicked off yet."}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => setLock(!settings?.predictionsLocked)}>
+                  {settings?.predictionsLocked ? "Unlock" : "Lock"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+
+        {currentUser?.isSystemUser && (
+          <div className="rounded-xl border border-destructive/30 bg-card p-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 text-destructive" />
+              <span className="text-sm font-semibold">Audit log</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-destructive/20 text-destructive">
+                System user only
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">State</span>
+              <span
+                className={`text-xs px-2 py-0.5 rounded font-medium ${
+                  auditLogSettings?.enabled ?? true
+                    ? "bg-success/20 text-success"
+                    : "bg-destructive/20 text-destructive"
+                }`}
+              >
+                {(auditLogSettings?.enabled ?? true) ? "Logging" : "Off"}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Turning this off stops every new entry — logins, profile edits, role/status changes, password
+              resets, everything — from being written anywhere. Nothing already logged is deleted, but nothing
+              new is recorded until this is switched back on. Use it if the audit table is growing out of
+              proportion.
+            </p>
+
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant={(auditLogSettings?.enabled ?? true) ? "destructive" : "outline"}
+                  className="w-full"
+                  disabled={isSavingAuditLog}
+                >
+                  {isSavingAuditLog && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {(auditLogSettings?.enabled ?? true) ? "Turn off audit logging" : "Turn audit logging back on"}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {(auditLogSettings?.enabled ?? true) ? "Turn off audit logging?" : "Turn audit logging back on?"}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {(auditLogSettings?.enabled ?? true)
+                      ? "From this point on, nothing will be recorded to the audit log for anyone, including other admins, until you turn it back on."
+                      : "New actions will start being recorded to the audit log again. Nothing that happened while it was off can be recovered."}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => setAuditLogEnabled(!(auditLogSettings?.enabled ?? true))}>
+                    {(auditLogSettings?.enabled ?? true) ? "Turn off" : "Turn on"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )}
+
+        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <BellRing className="h-4 w-4 text-primary" />
+            <span className="text-sm font-semibold">Prediction reminders</span>
+          </div>
+
+          {reminderEnabled && status && !status.remindersConfigured && (
+            <div className="rounded-lg bg-destructive/10 border border-destructive/30 px-3 py-2 text-xs text-destructive">
+              Twilio isn't configured yet (missing AccountSid/AuthToken in the backend's
+              appsettings.json) — reminders are on but nothing will actually send until that's set.
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="reminder-enabled">Enabled</Label>
+              <p className="text-xs text-muted-foreground">Send all non-admin users a reminder to predict</p>
+            </div>
+            <Switch id="reminder-enabled" checked={reminderEnabled} onCheckedChange={setReminderEnabled} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="reminder-hours">Hours before the week's first match</Label>
+            <Input
+              id="reminder-hours"
+              type="number"
+              min={1}
+              max={336}
+              value={reminderHoursBeforeFirstGame}
+              onChange={(e) => setReminderHoursBeforeFirstGame(Number(e.target.value))}
+              className="bg-secondary border-border"
+              disabled={!reminderEnabled}
+            />
+            {!reminderHoursValid && <p className="text-xs text-destructive">Must be between 1 and 336 hours.</p>}
+          </div>
+        </div>
+
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button className="w-full" disabled={!canSave}>
+              {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Save settings
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Apply settings?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Polling every {pollIntervalSeconds}s for {competition}.{" "}
+                {enabled ? (
+                  settings && !settings.enabled
+                    ? "This resumes live score syncing for all users."
+                    : "Live score syncing stays on for all users."
+                ) : (
+                  "This pauses live score syncing for all users — scores and match status will stop updating until it's re-enabled."
+                )}{" "}
+                {reminderEnabled
+                  ? `Reminders will go out ${reminderHoursBeforeFirstGame}h before each week's first match.`
+                  : "Prediction reminders stay off."}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => save()}>Apply</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </AdminLayout>
+  );
+};
+
+export default AdminSettings;
