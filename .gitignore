@@ -11,6 +11,7 @@ build/
 .env
 .env.*
 !.env.example
+!.env.production
 
 # Testing: Vitest and Playwright
 coverage/
@@ -39,3 +40,6 @@ bun-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+# Cloudflare
+.wrangler/
+.dev.vars*

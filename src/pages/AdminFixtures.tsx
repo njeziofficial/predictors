@@ -1,8 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Trash2 } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { api, type FixtureDto, type MatchWeekDto, type FixtureStatusName } from "@/lib/api";
 import AdminLayout from "@/components/AdminLayout";
 import { useApp } from "@/context/AppContext";
@@ -29,6 +29,8 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
+
+const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
 
 const statusOptions: { value: FixtureStatusName; label: string }[] = [
   { value: "PreMatch", label: "Pre-match" },
@@ -301,6 +303,23 @@ const AdminFixtures = () => {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["weeks"] });
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+
+  useEffect(() => {
+    setPage(1);
+  }, [pageSize]);
+
+  const totalCount = weeks?.length ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+  // Deleting the last week on the final page would otherwise strand you on an empty page.
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pagedWeeks = weeks?.slice((page - 1) * pageSize, page * pageSize);
+
   const { mutate: deleteFixture, isPending: isDeletingFixture } = useMutation({
     mutationFn: (id: string) => api.admin.fixtures.remove(id),
     onSuccess: () => {
@@ -351,7 +370,11 @@ const AdminFixtures = () => {
           </div>
         )}
 
-        {weeks?.map((week) => (
+        {weeks && weeks.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-8">No match weeks yet.</p>
+        )}
+
+        {pagedWeeks?.map((week) => (
           <div key={week.id} className="rounded-xl border border-border bg-card overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <div>
@@ -484,6 +507,49 @@ const AdminFixtures = () => {
             )}
           </div>
         ))}
+
+        {weeks && totalCount > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+            <div className="flex items-center gap-3">
+              <p className="text-muted-foreground">
+                Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, totalCount)} of {totalCount} weeks
+              </p>
+              <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                <SelectTrigger className="h-8 w-[110px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZE_OPTIONS.map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n} / page
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Prev
+              </Button>
+              <span className="text-muted-foreground text-xs">
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );
