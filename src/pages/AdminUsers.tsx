@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { api, type UserSummaryDto } from "@/lib/api";
 import AdminLayout from "@/components/AdminLayout";
+import CreateUserDialog from "@/components/CreateUserDialog";
 import { useApp } from "@/context/AppContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -230,17 +231,21 @@ const AdminUsers = () => {
   return (
     <AdminLayout>
       <div className="mx-auto max-w-6xl px-6 pt-8 pb-8 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Users</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage accounts and roles
-            {users && (
-              <>
-                {" "}
-                · {counts.total} users · {counts.admins} admins · {counts.disabled} disabled
-              </>
-            )}
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold">Users</h1>
+            <p className="text-sm text-muted-foreground">
+              Manage accounts and roles
+              {users && (
+                <>
+                  {" "}
+                  · {counts.total} users · {counts.admins} admins · {counts.disabled} disabled
+                </>
+              )}
+            </p>
+          </div>
+          {/* Creating accounts is the system user's call only — the backend enforces this too. */}
+          {currentUser?.isSystemUser && <CreateUserDialog />}
         </div>
 
         <div className="space-y-3">

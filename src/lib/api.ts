@@ -1,4 +1,4 @@
-import { clearAuth, getToken } from "./auth";
+import { clearAuth, getToken, saveAuth, tokenExpiresSoon } from "./auth";
 
 const BASE_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:63487";
@@ -65,8 +65,53 @@ export interface LeaderboardEntryDto {
   userId: string;
   name: string;
   totalPoints: number;
+  // Points carried over from before the app; already included in totalPoints. Always 0 on weekly boards.
+  previousPoints: number;
   position: number;
   lastSubmittedAt: string | null;
+}
+
+export interface PreviousPointsDto {
+  label: string;
+  points: number;
+  updatedAt: string;
+}
+
+export interface PreviousPointsEntryDto {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  points: number;
+  label: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PreviousPointsImportRow {
+  email: string;
+  points: number;
+  name?: string;
+  phoneNumber?: string;
+  whatsAppName?: string;
+}
+
+export type PreviousPointsImportAction = "add" | "update" | "create_user" | "unchanged" | "error";
+
+export interface PreviousPointsImportResult {
+  dryRun: boolean;
+  committed: boolean;
+  errorCount: number;
+  rows: {
+    rowNumber: number;
+    email: string;
+    name: string | null;
+    points: number;
+    action: PreviousPointsImportAction;
+    currentPoints: number | null;
+    error: string | null;
+  }[];
+  createdAccounts: { name: string; email: string; temporaryPassword: string }[];
 }
 
 export interface ScraperSettingsDto {
@@ -76,6 +121,7 @@ export interface ScraperSettingsDto {
   sourceName: string;
   availableSources: string[];
   predictionsLocked: boolean;
+  registrationClosed: boolean;
   reminderEnabled: boolean;
   reminderHoursBeforeFirstGame: number;
 }
@@ -85,6 +131,7 @@ export interface AdminStatusDto {
   scraperEnabled: boolean;
   remindersConfigured: boolean;
   predictionsLocked: boolean;
+  registrationClosed: boolean;
 }
 
 export interface AuditLogSettingsDto {
@@ -102,6 +149,15 @@ export interface UserSummaryDto {
   isSystemUser: boolean;
   createdAt: string;
   lastLoginAt: string | null;
+}
+
+export interface CreateUserPayload {
+  name: string;
+  email: string;
+  role: "Admin" | "User";
+  phoneNumber?: string;
+  whatsAppName?: string;
+  password?: string;
 }
 
 export interface UserProfileDto {
@@ -149,21 +205,84 @@ export interface UpdateScraperSettingsPayload {
 
 // ── Core request helper ───────────────────────────────────────────────────────
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers ?? {}),
-    },
-  });
+type RefreshOutcome = "ok" | "expired" | "disabled";
 
-  if (res.status === 401) {
-    clearAuth();
-    window.location.replace("/");
-    throw new Error("Session expired. Please log in again.");
+let refreshInFlight: Promise<RefreshOutcome> | null = null;
+
+// Swaps the httpOnly refresh cookie for a new access token. Concurrent callers share one
+// request, since each refresh rotates the cookie and a second parallel one would present a
+// token the server has just revoked.
+export function refreshSession(): Promise<RefreshOutcome> {
+  refreshInFlight ??= (async (): Promise<RefreshOutcome> => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/auth/refresh`, { method: "POST" });
+      if (res.status === 403) return "disabled";
+      if (!res.ok) return "expired";
+      const auth = (await res.json()) as AuthResponse;
+      // The refresh response carries the user's current role/flags, so a change an admin made
+      // (e.g. a promotion) shows up here without a fresh login.
+      saveAuth(auth.token, {
+        id: auth.userId,
+        name: auth.name,
+        email: auth.email,
+        role: auth.role,
+        mustResetPassword: auth.mustResetPassword,
+        isSystemUser: auth.isSystemUser,
+      });
+      return "ok";
+    } catch {
+      // Network failure: not proof the session is gone, so don't sign the user out over it.
+      return "ok";
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
+
+function endSession(outcome: Exclude<RefreshOutcome, "ok">): never {
+  clearAuth();
+  window.location.replace(outcome === "disabled" ? "/?disabled=1" : "/");
+  throw new Error(
+    outcome === "disabled"
+      ? "Your account has been disabled. Please contact an admin."
+      : "Session expired. Please log in again.",
+  );
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  // Auth endpoints answer 401 for ordinary reasons (e.g. a wrong password on login), so they
+  // never trigger a refresh or a forced sign-out.
+  const isAuthEndpoint = path.startsWith("/api/auth/");
+
+  if (!isAuthEndpoint) {
+    const current = getToken();
+    if (current && tokenExpiresSoon(current)) {
+      const outcome = await refreshSession();
+      if (outcome !== "ok") endSession(outcome);
+    }
+  }
+
+  const send = () => {
+    const token = getToken();
+    return fetch(`${BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers ?? {}),
+      },
+    });
+  };
+
+  const token = getToken();
+  let res = await send();
+
+  if (res.status === 401 && !isAuthEndpoint) {
+    const outcome = await refreshSession();
+    if (outcome !== "ok") endSession(outcome);
+    res = await send();
+    if (res.status === 401) endSession("expired");
   }
 
   if (!res.ok) {
@@ -191,6 +310,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const api = {
   auth: {
+    registrationStatus: () => request<{ open: boolean }>("/api/auth/registration-status"),
     login: (email: string, password: string) =>
       request<AuthResponse>("/api/auth/login", {
         method: "POST",
@@ -201,6 +321,8 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ name, email, phoneNumber, whatsAppName, password }),
       }),
+    // Revokes the refresh token server-side and clears its cookie.
+    logout: () => request<void>("/api/auth/logout", { method: "POST" }),
   },
 
   users: {
@@ -215,6 +337,7 @@ export const api = {
         method: "PUT",
         body: JSON.stringify({ currentPassword, newPassword }),
       }),
+    previousPoints: () => request<PreviousPointsDto[]>("/api/users/me/previous-points"),
   },
 
   weeks: {
@@ -265,6 +388,11 @@ export const api = {
         method: "PUT",
         body: JSON.stringify({ locked }),
       }),
+    setRegistrationClosed: (closed: boolean) =>
+      request<ScraperSettingsDto>("/api/admin/registration", {
+        method: "PUT",
+        body: JSON.stringify({ closed }),
+      }),
     status: () => request<AdminStatusDto>("/api/admin/status"),
     auditLogSettings: {
       get: () => request<AuditLogSettingsDto>("/api/admin/audit-log-settings"),
@@ -285,8 +413,27 @@ export const api = {
         return request<PagedAuditLogDto>(`/api/admin/audit${s ? `?${s}` : ""}`);
       },
     },
+    previousPoints: {
+      list: () => request<PreviousPointsEntryDto[]>("/api/admin/previous-points"),
+      // System user only. dryRun validates and previews without saving; nothing is saved if any row errors.
+      import: (label: string, rows: PreviousPointsImportRow[], dryRun: boolean) =>
+        request<PreviousPointsImportResult>("/api/admin/previous-points/import", {
+          method: "POST",
+          body: JSON.stringify({ label, rows, dryRun }),
+        }),
+      remove: (id: string) =>
+        request<{ message: string }>(`/api/admin/previous-points/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        }),
+    },
     users: {
       list: () => request<UserSummaryDto[]>("/api/admin/users"),
+      // System user only. When `password` is omitted the backend generates one and returns it once.
+      create: (payload: CreateUserPayload) =>
+        request<{ user: UserSummaryDto; temporaryPassword: string | null }>("/api/admin/users", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        }),
       setRole: (id: string, role: "Admin" | "User") =>
         request<UserSummaryDto>(`/api/admin/users/${encodeURIComponent(id)}/role`, {
           method: "PUT",

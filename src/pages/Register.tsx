@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -18,6 +19,10 @@ const Register = () => {
   const [loading, setLoading] = useState(false);
   const { login } = useApp();
   const navigate = useNavigate();
+  const { data: registration } = useQuery({
+    queryKey: ["registration-status"],
+    queryFn: api.auth.registrationStatus,
+  });
 
   const passwordsMatch = password === confirmPassword;
   const allFilled =
@@ -66,6 +71,14 @@ const Register = () => {
           <CardDescription>Join Octopus Prediction</CardDescription>
         </CardHeader>
         <CardContent>
+          {registration?.open === false ? (
+            <div className="rounded-lg border border-border bg-secondary p-4 text-center space-y-1">
+              <p className="text-sm font-medium">Registration is closed</p>
+              <p className="text-xs text-muted-foreground">
+                New sign-ups are not being accepted right now. Please contact an admin if you need an account.
+              </p>
+            </div>
+          ) : (
           <form onSubmit={handleRegister} className="space-y-4">
             <Input
               placeholder="Full Name"
@@ -123,6 +136,7 @@ const Register = () => {
               {loading ? "Creating account…" : "Register"}
             </Button>
           </form>
+          )}
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Already have an account?{" "}
             <Link to="/" className="text-primary underline">

@@ -4,7 +4,7 @@ import { useApp } from "@/context/AppContext";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { PredictionDto, MatchWeekDto } from "@/lib/api";
-import { ChevronDown, ChevronUp, Trophy, Star, CheckCircle2, TrendingUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Trophy, Star, CheckCircle2, TrendingUp, History } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import NavBar from "@/components/NavBar";
 
@@ -36,6 +36,12 @@ const Dashboard = () => {
   const { data: overallLeaderboard = [] } = useQuery({
     queryKey: ["leaderboard"],
     queryFn: api.leaderboard.overall,
+    enabled: !!currentUser,
+  });
+
+  const { data: previousPoints = [] } = useQuery({
+    queryKey: ["previous-points-mine"],
+    queryFn: api.users.previousPoints,
     enabled: !!currentUser,
   });
 
@@ -95,7 +101,8 @@ const Dashboard = () => {
     }
   });
 
-  const totalPts = weekSummaries.reduce((s, h) => s + h.totalPoints, 0);
+  const previousPts = previousPoints.reduce((s, p) => s + p.points, 0);
+  const totalPts = weekSummaries.reduce((s, h) => s + h.totalPoints, 0) + previousPts;
   const totalPreds = weekSummaries.reduce((s, h) => s + h.predictions.length, 0);
   const correctPreds = weekSummaries.reduce((s, h) => s + h.predictions.filter(p => p.pointsEarned > 0).length, 0);
   const accuracy = totalPreds > 0 ? Math.round((correctPreds / totalPreds) * 100) : 0;
@@ -144,6 +151,23 @@ const Dashboard = () => {
             <p className="text-[10px] text-muted-foreground">Overall rank</p>
           </div>
         </div>
+
+        {/* Points carried over from predicting before the app */}
+        {previousPoints.length > 0 && (
+          <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+            <History className="h-5 w-5 text-primary shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold">Previous points</p>
+              <p className="text-xs text-muted-foreground">
+                {previousPoints.length === 1
+                  ? previousPoints[0].label
+                  : previousPoints.map(p => `${p.label}: ${p.points}`).join(" · ")}
+                {" · included in your total"}
+              </p>
+            </div>
+            <p className="text-2xl font-bold text-primary">{previousPts}</p>
+          </div>
+        )}
 
         {/* Points per week chart */}
         {chartData.length > 0 && (

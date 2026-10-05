@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, CalendarDays, Users, Settings, ScrollText, User, LogOut } from "lucide-react";
+import { LayoutDashboard, CalendarDays, Users, History, Settings, ScrollText, User, LogOut } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { toast } from "sonner";
 
@@ -8,6 +8,7 @@ const navItems = [
   { path: "/admin", label: "Overview", icon: LayoutDashboard },
   { path: "/admin/fixtures", label: "Fixtures", icon: CalendarDays },
   { path: "/admin/users", label: "Users", icon: Users },
+  { path: "/admin/previous-points", label: "Previous Points", icon: History },
   { path: "/admin/audit", label: "Audit Trail", icon: ScrollText },
   { path: "/admin/settings", label: "Settings", icon: Settings },
   { path: "/profile", label: "Profile", icon: User },

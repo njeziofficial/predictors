@@ -15,6 +15,7 @@ import AdminSettings from "./pages/AdminSettings";
 import AdminUsers from "./pages/AdminUsers";
 import AdminFixtures from "./pages/AdminFixtures";
 import AdminAuditTrail from "./pages/AdminAuditTrail";
+import AdminPreviousPoints from "./pages/AdminPreviousPoints";
 import Profile from "./pages/Profile";
 import ResetPasswordRequired from "./pages/ResetPasswordRequired";
 import NotFound from "./pages/NotFound";
@@ -54,6 +55,7 @@ const App = () => (
             <Route path="/admin/users" element={<RequireFreshPassword><AdminUsers /></RequireFreshPassword>} />
             <Route path="/admin/fixtures" element={<RequireFreshPassword><AdminFixtures /></RequireFreshPassword>} />
             <Route path="/admin/audit" element={<RequireFreshPassword><AdminAuditTrail /></RequireFreshPassword>} />
+            <Route path="/admin/previous-points" element={<RequireFreshPassword><AdminPreviousPoints /></RequireFreshPassword>} />
             <Route path="/profile" element={<RequireFreshPassword><Profile /></RequireFreshPassword>} />
             <Route path="*" element={<NotFound />} />
           </Routes>

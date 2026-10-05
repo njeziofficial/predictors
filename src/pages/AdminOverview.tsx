@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Loader2, Users, CalendarDays, Radio, Lock } from "lucide-react";
+import { Loader2, Users, CalendarDays, Radio, Lock, UserPlus } from "lucide-react";
 import { api } from "@/lib/api";
 import AdminLayout from "@/components/AdminLayout";
 import { useApp } from "@/context/AppContext";
@@ -38,7 +38,7 @@ const AdminOverview = () => {
           <p className="text-sm text-muted-foreground">Snapshot of the prediction game</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center gap-2 text-muted-foreground text-xs mb-2">
               <Users className="h-3.5 w-3.5" /> Users
@@ -75,6 +75,17 @@ const AdminOverview = () => {
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               {status?.predictionsLocked ? "No one can submit predictions" : "Users can submit as normal"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center gap-2 text-muted-foreground text-xs mb-2">
+              <UserPlus className="h-3.5 w-3.5" /> Registration
+            </div>
+            <p className={`text-sm font-semibold ${status?.registrationClosed ? "text-destructive" : ""}`}>
+              {status?.registrationClosed ? "Closed" : "Open"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {status?.registrationClosed ? "New sign-ups are blocked" : "Anyone can sign up"}
             </p>
           </div>
         </div>

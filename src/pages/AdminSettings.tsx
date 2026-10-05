@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
-import { Loader2, Radio, Settings as SettingsIcon, BellRing, Lock, LockOpen, ShieldAlert } from "lucide-react";
+import { Loader2, Radio, Settings as SettingsIcon, BellRing, Lock, LockOpen, ShieldAlert, UserPlus, UserX } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,6 +99,19 @@ const AdminSettings = () => {
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "Failed to update the predictions lock.");
+    },
+  });
+
+  const { mutate: setRegistrationClosed, isPending: isSettingRegistration } = useMutation({
+    mutationFn: (closed: boolean) => api.admin.setRegistrationClosed(closed),
+    onSuccess: (_, closed) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-status"] });
+      queryClient.invalidateQueries({ queryKey: ["registration-status"] });
+      toast.success(closed ? "Registration closed." : "Registration reopened.");
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to update registration.");
     },
   });
 
@@ -298,6 +311,67 @@ const AdminSettings = () => {
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction onClick={() => setLock(!settings?.predictionsLocked)}>
                   {settings?.predictionsLocked ? "Unlock" : "Lock"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <UserPlus className="h-4 w-4 text-primary" />
+            <span className="text-sm font-semibold">Registration</span>
+          </div>
+
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">State</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded font-medium ${
+                settings?.registrationClosed ? "bg-destructive/20 text-destructive" : "bg-success/20 text-success"
+              }`}
+            >
+              {settings?.registrationClosed ? "Closed" : "Open"}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Closing registration stops new people from signing up. Existing users can still log in and predict, and
+            the system user can still create accounts from the Users page. This takes effect right away.
+          </p>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant={settings?.registrationClosed ? "outline" : "destructive"}
+                className="w-full"
+                disabled={isSettingRegistration || !settings}
+              >
+                {isSettingRegistration && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {settings?.registrationClosed ? (
+                  <>
+                    <UserPlus className="h-4 w-4 mr-2" /> Reopen registration
+                  </>
+                ) : (
+                  <>
+                    <UserX className="h-4 w-4 mr-2" /> Close registration
+                  </>
+                )}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {settings?.registrationClosed ? "Reopen registration?" : "Close registration?"}
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {settings?.registrationClosed
+                    ? "Anyone with the link will be able to create an account again."
+                    : "The sign-up page will be closed to new users until you reopen it. Existing accounts are not affected."}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => setRegistrationClosed(!settings?.registrationClosed)}>
+                  {settings?.registrationClosed ? "Reopen" : "Close"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

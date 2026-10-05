@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -16,6 +17,10 @@ const Login = () => {
   const { login } = useApp();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { data: registration } = useQuery({
+    queryKey: ["registration-status"],
+    queryFn: api.auth.registrationStatus,
+  });
 
   useEffect(() => {
     if (searchParams.get("disabled") === "1") {
@@ -132,10 +137,12 @@ const Login = () => {
             </Button>
           </form>
 
-          <p className="text-center text-xs text-muted-foreground">
-            Don't have an account?{" "}
-            <a href="/register" className="text-primary underline">Register</a>
-          </p>
+          {registration?.open !== false && (
+            <p className="text-center text-xs text-muted-foreground">
+              Don't have an account?{" "}
+              <a href="/register" className="text-primary underline">Register</a>
+            </p>
+          )}
 
           <div className="border-t border-border pt-4">
             <p className="text-xs text-muted-foreground text-center mb-3 uppercase tracking-wider">Scoring</p>

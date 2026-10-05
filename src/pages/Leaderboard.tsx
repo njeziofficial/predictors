@@ -171,7 +171,9 @@ const Leaderboard = () => {
                 </div>
                 <div className="text-right">
                   <p className={`text-lg font-bold ${isMe ? "text-primary" : ""}`}>{entry.totalPoints}</p>
-                  <p className="text-[10px] text-muted-foreground">pts</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {entry.previousPoints > 0 ? `pts · incl. ${entry.previousPoints} previous` : "pts"}
+                  </p>
                 </div>
               </div>
             );
