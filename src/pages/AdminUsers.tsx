@@ -21,6 +21,7 @@ import {
 import { api, type UserSummaryDto } from "@/lib/api";
 import AdminLayout from "@/components/AdminLayout";
 import CreateUserDialog from "@/components/CreateUserDialog";
+import EditUserDialog from "@/components/EditUserDialog";
 import { useApp } from "@/context/AppContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -414,6 +415,7 @@ const AdminUsers = () => {
                       {u.lastLoginAt ? format(new Date(u.lastLoginAt), "MMM d, HH:mm") : "Never"}
                     </TableCell>
                     <TableCell className="text-right space-x-1 whitespace-nowrap">
+                      {currentUser?.isSystemUser && <EditUserDialog user={u} />}
                       {(() => {
                         const demoteBlocked = u.role === "admin" && currentUser?.isSystemUser !== true;
                         return (

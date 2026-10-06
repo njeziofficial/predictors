@@ -58,7 +58,7 @@ const Leaderboard = () => {
       <div className="mx-auto max-w-2xl px-4 pt-6 space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Standings</h1>
-          <p className="text-sm text-muted-foreground">Points tiebreak: earliest submission wins</p>
+          <p className="text-sm text-muted-foreground">Level on points: most correct scores, then earliest submission</p>
         </div>
 
         {/* Tabs */}
@@ -166,6 +166,11 @@ const Leaderboard = () => {
                           ? format(new Date(entry.lastSubmittedAt), "HH:mm")
                           : "--:--"}
                       </span>
+                      {entry.correctScores > 0 && (
+                        <span>
+                          · {entry.correctScores} correct score{entry.correctScores === 1 ? "" : "s"}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

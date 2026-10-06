@@ -67,6 +67,8 @@ export interface LeaderboardEntryDto {
   totalPoints: number;
   // Points carried over from before the app; already included in totalPoints. Always 0 on weekly boards.
   previousPoints: number;
+  // Exact scores called (overall boards include previous ones). First tiebreak on equal points.
+  correctScores: number;
   position: number;
   lastSubmittedAt: string | null;
 }
@@ -74,6 +76,7 @@ export interface LeaderboardEntryDto {
 export interface PreviousPointsDto {
   label: string;
   points: number;
+  correctScores: number;
   updatedAt: string;
 }
 
@@ -83,20 +86,23 @@ export interface PreviousPointsEntryDto {
   userName: string;
   userEmail: string;
   points: number;
+  correctScores: number;
   label: string;
   createdAt: string;
   updatedAt: string;
 }
 
+// Matched by email when given, otherwise by WhatsApp name. correctScores left out keeps the current count.
 export interface PreviousPointsImportRow {
-  email: string;
+  email?: string;
   points: number;
+  correctScores?: number;
   name?: string;
   phoneNumber?: string;
   whatsAppName?: string;
 }
 
-export type PreviousPointsImportAction = "add" | "update" | "create_user" | "unchanged" | "error";
+export type PreviousPointsImportAction = "add" | "update" | "create_user" | "unchanged" | "skipped" | "error";
 
 export interface PreviousPointsImportResult {
   dryRun: boolean;
@@ -106,9 +112,13 @@ export interface PreviousPointsImportResult {
     rowNumber: number;
     email: string;
     name: string | null;
+    whatsAppName: string | null;
     points: number;
+    correctScores: number;
     action: PreviousPointsImportAction;
     currentPoints: number | null;
+    currentCorrectScores: number | null;
+    matchedBy: "email" | "whatsapp" | "name" | null;
     error: string | null;
   }[];
   createdAccounts: { name: string; email: string; temporaryPassword: string }[];
@@ -158,6 +168,13 @@ export interface CreateUserPayload {
   phoneNumber?: string;
   whatsAppName?: string;
   password?: string;
+}
+
+export interface UpdateUserDetailsPayload {
+  name?: string;
+  email?: string;
+  phoneNumber?: string;
+  whatsAppName?: string;
 }
 
 export interface UserProfileDto {
@@ -433,6 +450,12 @@ export const api = {
         request<{ user: UserSummaryDto; temporaryPassword: string | null }>("/api/admin/users", {
           method: "POST",
           body: JSON.stringify(payload),
+        }),
+      // System user only. Only the fields present are changed; "" clears phone/WhatsApp.
+      updateDetails: (id: string, details: UpdateUserDetailsPayload) =>
+        request<UserSummaryDto>(`/api/admin/users/${encodeURIComponent(id)}`, {
+          method: "PUT",
+          body: JSON.stringify(details),
         }),
       setRole: (id: string, role: "Admin" | "User") =>
         request<UserSummaryDto>(`/api/admin/users/${encodeURIComponent(id)}/role`, {
