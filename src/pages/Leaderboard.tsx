@@ -1,16 +1,23 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useApp } from "@/context/AppContext";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { format } from "date-fns";
 import { Trophy, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import NavBar from "@/components/NavBar";
+import WeeklyChampions from "@/components/WeeklyChampions";
+
+type Tab = "weekly" | "overall" | "champions";
 
 const Leaderboard = () => {
   const { currentUser } = useApp();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<"overall" | "weekly">("weekly");
+  // Tab lives in the URL so other pages can link straight to ?tab=champions.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const tab: Tab = tabParam === "overall" || tabParam === "champions" ? tabParam : "weekly";
+  const setTab = (t: Tab) => setSearchParams(t === "weekly" ? {} : { tab: t }, { replace: true });
   const [weekIdx, setWeekIdx] = useState(0);
 
   const { data: weeks = [] } = useQuery({
@@ -43,7 +50,7 @@ const Leaderboard = () => {
   if (!currentUser) return null;
 
   const isLive = currentWeekData?.fixtures.some(f => f.status === "live");
-  const displayData = tab === "overall" ? overallData : weeklyData;
+  const displayData = tab === "overall" ? overallData : tab === "weekly" ? weeklyData : [];
   const top3 = displayData.slice(0, 3);
   const podiumOrder = top3.length >= 3 ? [top3[1], top3[0], top3[2]] : top3;
   const podiumHeights = ["h-20", "h-28", "h-16"];
@@ -79,7 +86,17 @@ const Leaderboard = () => {
           >
             Overall
           </button>
+          <button
+            onClick={() => setTab("champions")}
+            className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              tab === "champions" ? "bg-background text-foreground" : "text-muted-foreground"
+            }`}
+          >
+            Champions
+          </button>
         </div>
+
+        {tab === "champions" && <WeeklyChampions weeks={weeks} currentUserId={currentUser.id} />}
 
         {/* Week navigator */}
         {tab === "weekly" && activeWeeks.length > 0 && (

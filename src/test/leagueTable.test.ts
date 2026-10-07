@@ -100,6 +100,19 @@ describe("parseLeagueTable", () => {
     ]);
   });
 
+  it("reads a correct-score list without asterisks or leading zeros", () => {
+    const table = parseLeagueTable(
+      "1.God’s O  104  13  117\n\n2.Anony  81  10  91\n\n" +
+        "Note correct score will be used when two managers finish on the same points\n\n" +
+        "Correct Score Update\n\nGod’s O 9\n Anonymous 1\n",
+    )!;
+    expect(table.warnings).toEqual([]);
+    expect(table.rows.map((r) => [r.whatsAppName, r.points, r.correctScores])).toEqual([
+      ["God’s O", 117, 9],
+      ["Anony", 91, 1],
+    ]);
+  });
+
   it("warns about correct scores for names not in the table", () => {
     const table = parseLeagueTable("1.Bosco 10 2 12\n2.Jules 5 5 10\nCorrect scores\n*Stranger* 03\n")!;
     expect(table.warnings).toEqual(['Correct scores for "Stranger" (3) match no player in the table.']);

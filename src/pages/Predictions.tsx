@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { Lock, Clock, Loader2 } from "lucide-react";
 import NavBar from "@/components/NavBar";
+import { LatestChampions } from "@/components/WeeklyChampions";
 
 type Pick = { outcome: OutcomeType; homeGoals?: number; awayGoals?: number };
 
@@ -258,6 +259,8 @@ const Predictions = () => {
       <NavBar />
 
       <div className="mx-auto max-w-2xl px-4 pt-6 space-y-6">
+        <LatestChampions weeks={weeks} currentUserId={currentUser.id} />
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
