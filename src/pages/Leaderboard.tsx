@@ -13,12 +13,14 @@ type Tab = "weekly" | "overall" | "champions";
 const Leaderboard = () => {
   const { currentUser } = useApp();
   const navigate = useNavigate();
-  // Tab lives in the URL so other pages can link straight to ?tab=champions.
+  // Tab lives in the URL so other pages can link straight to ?tab=champions. The season table
+  // (previous points included) is the default: it's the one players come here for.
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
-  const tab: Tab = tabParam === "overall" || tabParam === "champions" ? tabParam : "weekly";
-  const setTab = (t: Tab) => setSearchParams(t === "weekly" ? {} : { tab: t }, { replace: true });
-  const [weekIdx, setWeekIdx] = useState(0);
+  const tab: Tab = tabParam === "weekly" || tabParam === "champions" ? tabParam : "overall";
+  const setTab = (t: Tab) => setSearchParams(t === "overall" ? {} : { tab: t }, { replace: true });
+  // null = the latest started week.
+  const [pickedWeekIdx, setWeekIdx] = useState<number | null>(null);
 
   const { data: weeks = [] } = useQuery({
     queryKey: ["weeks"],
@@ -26,9 +28,12 @@ const Leaderboard = () => {
     enabled: !!currentUser,
   });
 
-  const activeWeeks = weeks.filter(w =>
-    w.fixtures.some(f => f.status !== "pre_match")
-  );
+  // Oldest first, so the arrows step back and forward in time.
+  const firstKickoff = (w: (typeof weeks)[number]) => Math.min(...w.fixtures.map(f => new Date(f.kickoff).getTime()));
+  const activeWeeks = weeks
+    .filter(w => w.fixtures.some(f => f.status !== "pre_match"))
+    .sort((a, b) => firstKickoff(a) - firstKickoff(b));
+  const weekIdx = pickedWeekIdx ?? activeWeeks.length - 1;
   const currentWeekData = activeWeeks[weekIdx];
 
   const { data: overallData = [] } = useQuery({
@@ -50,6 +55,7 @@ const Leaderboard = () => {
   if (!currentUser) return null;
 
   const isLive = currentWeekData?.fixtures.some(f => f.status === "live");
+  const isFinal = !!currentWeekData?.fixtures.every(f => f.status !== "pre_match" && f.status !== "live");
   const displayData = tab === "overall" ? overallData : tab === "weekly" ? weeklyData : [];
   const top3 = displayData.slice(0, 3);
   const podiumOrder = top3.length >= 3 ? [top3[1], top3[0], top3[2]] : top3;
@@ -71,20 +77,20 @@ const Leaderboard = () => {
         {/* Tabs */}
         <div className="flex gap-1 bg-secondary rounded-lg p-1 w-fit">
           <button
-            onClick={() => setTab("weekly")}
-            className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              tab === "weekly" ? "bg-background text-foreground" : "text-muted-foreground"
-            }`}
-          >
-            This Week
-          </button>
-          <button
             onClick={() => setTab("overall")}
             className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
               tab === "overall" ? "bg-background text-foreground" : "text-muted-foreground"
             }`}
           >
-            Overall
+            Season
+          </button>
+          <button
+            onClick={() => setTab("weekly")}
+            className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              tab === "weekly" ? "bg-background text-foreground" : "text-muted-foreground"
+            }`}
+          >
+            By Week
           </button>
           <button
             onClick={() => setTab("champions")}
@@ -102,7 +108,7 @@ const Leaderboard = () => {
         {tab === "weekly" && activeWeeks.length > 0 && (
           <div className="flex items-center justify-between">
             <button
-              onClick={() => setWeekIdx(i => Math.max(0, i - 1))}
+              onClick={() => setWeekIdx(Math.max(0, weekIdx - 1))}
               disabled={weekIdx === 0}
               className="p-1.5 rounded bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
             >
@@ -110,14 +116,14 @@ const Leaderboard = () => {
             </button>
             <div className="text-center">
               <p className="text-sm font-semibold">
-                {currentWeekData?.name} {isLive ? "(live)" : "(ended)"}
+                {currentWeekData?.name}
               </p>
-              <p className={`text-xs ${isLive ? "text-primary" : "text-success"}`}>
-                {isLive ? "In progress — updating after each match" : "Results final"}
+              <p className={`text-xs ${isFinal ? "text-success" : "text-primary"}`}>
+                {isLive ? "Live — updating after each match" : isFinal ? "Results final" : "In progress — more matches to play"}
               </p>
             </div>
             <button
-              onClick={() => setWeekIdx(i => Math.min(activeWeeks.length - 1, i + 1))}
+              onClick={() => setWeekIdx(Math.min(activeWeeks.length - 1, weekIdx + 1))}
               disabled={weekIdx >= activeWeeks.length - 1}
               className="p-1.5 rounded bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
             >
@@ -177,15 +183,16 @@ const Leaderboard = () => {
                       {isMe && <span className="ml-1 text-xs text-primary">(you)</span>}
                     </p>
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      <span>
-                        {entry.lastSubmittedAt
-                          ? format(new Date(entry.lastSubmittedAt), "HH:mm")
-                          : "--:--"}
-                      </span>
+                      {entry.lastSubmittedAt && (
+                        <>
+                          <Clock className="h-3 w-3" />
+                          <span>{format(new Date(entry.lastSubmittedAt), "HH:mm")}</span>
+                        </>
+                      )}
                       {entry.correctScores > 0 && (
                         <span>
-                          · {entry.correctScores} correct score{entry.correctScores === 1 ? "" : "s"}
+                          {entry.lastSubmittedAt && "· "}
+                          {entry.correctScores} correct score{entry.correctScores === 1 ? "" : "s"}
                         </span>
                       )}
                     </div>

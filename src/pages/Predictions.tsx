@@ -11,6 +11,7 @@ import { format } from "date-fns";
 import { Lock, Clock, Loader2 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import { LatestChampions } from "@/components/WeeklyChampions";
+import MyStanding from "@/components/MyStanding";
 
 type Pick = { outcome: OutcomeType; homeGoals?: number; awayGoals?: number };
 
@@ -259,6 +260,7 @@ const Predictions = () => {
       <NavBar />
 
       <div className="mx-auto max-w-2xl px-4 pt-6 space-y-6">
+        <MyStanding userId={currentUser.id} />
         <LatestChampions weeks={weeks} currentUserId={currentUser.id} />
 
         {/* Header */}

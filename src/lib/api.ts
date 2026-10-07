@@ -5,6 +5,8 @@ const BASE_URL =
 
 // ── Response types ────────────────────────────────────────────────────────────
 
+export type LoginMethod = "email" | "whatsapp";
+
 export interface AuthResponse {
   token: string;
   userId: string;
@@ -328,10 +330,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export const api = {
   auth: {
     registrationStatus: () => request<{ open: boolean }>("/api/auth/registration-status"),
-    login: (email: string, password: string) =>
+    // `login` is an email address or a WhatsApp name, as `method` says.
+    login: (method: LoginMethod, login: string, password: string) =>
       request<AuthResponse>("/api/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ method, login, password }),
       }),
     register: (name: string, email: string, phoneNumber: string, whatsAppName: string, password: string) =>
       request<AuthResponse>("/api/auth/register", {
