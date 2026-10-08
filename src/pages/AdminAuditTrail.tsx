@@ -48,7 +48,7 @@ const AdminAuditTrail = () => {
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   return (
-    <AdminLayout>
+    <AdminLayout permission="audit.view">
       <div className="mx-auto max-w-6xl px-6 pt-8 pb-8 space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Audit Trail</h1>

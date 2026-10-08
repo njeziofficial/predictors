@@ -26,7 +26,7 @@ const ResetPasswordRequired = () => {
     onSuccess: () => {
       updateUser({ mustResetPassword: false });
       toast.success("Password updated.");
-      navigate(currentUser?.role === "admin" ? "/admin" : "/predict");
+      navigate(currentUser?.role === "admin" ? "/choose" : "/predict");
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to update password."),
   });

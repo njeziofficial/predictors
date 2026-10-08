@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   getStoredUser,
   saveAuth,
@@ -20,6 +21,18 @@ const AppContext = createContext<AppState | undefined>(undefined);
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<StoredUser | null>(getStoredUser);
+  const queryClient = useQueryClient();
+
+  // Cached responses belong to whoever fetched them (predictions, profile, admin lists, chats).
+  // Drop them all when the signed-in account changes, so the next person on this browser never
+  // sees the last one's data, even for a moment.
+  const cachedForUser = useRef(currentUser?.id ?? null);
+  useEffect(() => {
+    const id = currentUser?.id ?? null;
+    if (id === cachedForUser.current) return;
+    cachedForUser.current = id;
+    queryClient.clear();
+  }, [currentUser?.id, queryClient]);
 
   // Keep currentUser in step with storage when it changes outside React: a silent token
   // refresh in this tab, or a login/logout/refresh in another tab.

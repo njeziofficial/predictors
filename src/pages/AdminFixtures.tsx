@@ -341,7 +341,7 @@ const AdminFixtures = () => {
   });
 
   return (
-    <AdminLayout>
+    <AdminLayout permission="fixtures.manage">
       <div className="mx-auto max-w-4xl px-6 pt-8 pb-8 space-y-6">
         <div className="flex items-center justify-between">
           <div>

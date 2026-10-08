@@ -23,6 +23,7 @@ import AdminLayout from "@/components/AdminLayout";
 import CreateUserDialog from "@/components/CreateUserDialog";
 import EditUserDialog from "@/components/EditUserDialog";
 import { useApp } from "@/context/AppContext";
+import { usePermissions } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -89,6 +90,7 @@ const compareUsers = (sort: SortKey) => (a: UserSummaryDto, b: UserSummaryDto) =
 const AdminUsers = () => {
   const queryClient = useQueryClient();
   const { currentUser } = useApp();
+  const { can, isSystemUser } = usePermissions();
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const [pendingResetId, setPendingResetId] = useState<string | null>(null);
@@ -230,7 +232,7 @@ const AdminUsers = () => {
   });
 
   return (
-    <AdminLayout>
+    <AdminLayout permission="users.view">
       <div className="mx-auto max-w-6xl px-6 pt-8 pb-8 space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -245,8 +247,8 @@ const AdminUsers = () => {
               )}
             </p>
           </div>
-          {/* Creating accounts is the system user's call only — the backend enforces this too. */}
-          {currentUser?.isSystemUser && <CreateUserDialog />}
+          {/* Admins with the permission create players; only the system admin creates admins. */}
+          {can("users.create") && <CreateUserDialog allowAdmin={isSystemUser} />}
         </div>
 
         <div className="space-y-3">
@@ -415,21 +417,15 @@ const AdminUsers = () => {
                       {u.lastLoginAt ? format(new Date(u.lastLoginAt), "MMM d, HH:mm") : "Never"}
                     </TableCell>
                     <TableCell className="text-right space-x-1 whitespace-nowrap">
-                      {currentUser?.isSystemUser && <EditUserDialog user={u} />}
-                      {(() => {
-                        const demoteBlocked = u.role === "admin" && currentUser?.isSystemUser !== true;
+                      {can("users.edit") && (u.role !== "admin" || isSystemUser) && <EditUserDialog user={u} />}
+                      {/* Promoting and demoting admins is the system admin's alone. */}
+                      {isSystemUser && (() => {
                         return (
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={isSettingRole || u.isSystemUser || demoteBlocked}
-                            title={
-                              u.isSystemUser
-                                ? "The system user's role cannot be changed"
-                                : demoteBlocked
-                                  ? "Only the system user can demote another admin"
-                                  : undefined
-                            }
+                            disabled={isSettingRole || u.isSystemUser}
+                            title={u.isSystemUser ? "The system user's role cannot be changed" : undefined}
                             onClick={() => setRole({ id: u.id, role: u.role === "admin" ? "User" : "Admin" })}
                           >
                             {u.role === "admin" ? (
@@ -444,16 +440,21 @@ const AdminUsers = () => {
                           </Button>
                         );
                       })()}
+                      {can("users.status") && (
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={isSettingStatus || u.id === currentUser?.id || u.isSystemUser}
+                        disabled={
+                          isSettingStatus || u.id === currentUser?.id || u.isSystemUser || (u.role === "admin" && !isSystemUser)
+                        }
                         title={
                           u.isSystemUser
                             ? "The system user can never be disabled"
                             : u.id === currentUser?.id
                               ? "You cannot disable your own account"
-                              : undefined
+                              : u.role === "admin" && !isSystemUser
+                                ? "Only the system admin can enable or disable an admin"
+                                : undefined
                         }
                         onClick={() => setStatus({ id: u.id, isDisabled: !u.isDisabled })}
                       >
@@ -467,7 +468,8 @@ const AdminUsers = () => {
                           </>
                         )}
                       </Button>
-                      {(() => {
+                      )}
+                      {can("users.reset_password") && (() => {
                         const canReset =
                           !u.isSystemUser && (u.role !== "admin" || currentUser?.isSystemUser === true);
                         const disabledReason = u.isSystemUser
@@ -510,7 +512,7 @@ const AdminUsers = () => {
                           </AlertDialog>
                         );
                       })()}
-                      {(() => {
+                      {can("users.delete") && (() => {
                         const deleteBlocked = u.role === "admin" && currentUser?.isSystemUser !== true;
                         const deleteDisabledReason = u.isSystemUser
                           ? "The system user can never be deleted"

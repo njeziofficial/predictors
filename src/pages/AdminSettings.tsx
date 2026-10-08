@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
-import { Loader2, Radio, Settings as SettingsIcon, BellRing, Lock, LockOpen, ShieldAlert, UserPlus, UserX } from "lucide-react";
+import { Loader2, Radio, Settings as SettingsIcon, BellRing, Lock, LockOpen, ShieldAlert, UserPlus, UserX, Eye } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import AdminLayout from "@/components/AdminLayout";
 import { useApp } from "@/context/AppContext";
+import { usePermissions } from "@/lib/permissions";
 
 // The scraper's Puppeteer sources are hard-coded to La Liga's pages (Flashscore/Livescore/
 // BBC Sport) — this only labels the weeks it creates, so it's constrained to the one value
@@ -31,6 +32,8 @@ const COMPETITIONS = ["La Liga"];
 const AdminSettings = () => {
   const queryClient = useQueryClient();
   const { currentUser } = useApp();
+  const { can } = usePermissions();
+  const canManage = can("settings.manage");
 
   const [enabled, setEnabled] = useState(true);
   const [pollIntervalSeconds, setPollIntervalSeconds] = useState(60);
@@ -128,7 +131,7 @@ const AdminSettings = () => {
 
   if (isLoading) {
     return (
-      <AdminLayout>
+      <AdminLayout permission="settings.view">
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
@@ -138,7 +141,7 @@ const AdminSettings = () => {
 
   if (error) {
     return (
-      <AdminLayout>
+      <AdminLayout permission="settings.view">
         <div className="mx-auto max-w-2xl px-4 pt-12">
           <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-center">
             <p className="text-sm text-destructive font-medium">Failed to load admin settings</p>
@@ -157,7 +160,7 @@ const AdminSettings = () => {
   const canSave = intervalValid && competitionValid && reminderHoursValid && !isSaving;
 
   return (
-    <AdminLayout>
+    <AdminLayout permission="settings.view">
       <div className="mx-auto max-w-2xl px-4 pt-6 pb-8 space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Settings</h1>
@@ -189,6 +192,15 @@ const AdminSettings = () => {
           </div>
         </div>
 
+        {!canManage && (
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-2 text-xs text-muted-foreground">
+            <Eye className="h-3.5 w-3.5 shrink-0" />
+            View only. Your permissions don't include changing settings.
+          </div>
+        )}
+
+        {/* A disabled fieldset disables every control inside it for view-only admins. */}
+        <fieldset disabled={!canManage} className="min-w-0 space-y-6">
         <div className="rounded-xl border border-border bg-card p-4 space-y-4">
           <div className="flex items-center gap-2">
             <SettingsIcon className="h-4 w-4 text-primary" />
@@ -507,6 +519,7 @@ const AdminSettings = () => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        </fieldset>
       </div>
     </AdminLayout>
   );

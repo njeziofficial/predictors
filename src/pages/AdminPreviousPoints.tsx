@@ -13,6 +13,7 @@ import { parseCsv } from "@/lib/csv";
 import { parseLeagueTable } from "@/lib/leagueTable";
 import AdminLayout from "@/components/AdminLayout";
 import { useApp } from "@/context/AppContext";
+import { usePermissions } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -125,7 +126,9 @@ const csvToImportRows = (text: string): { rows: PreviousPointsImportRow[]; probl
 const AdminPreviousPoints = () => {
   const queryClient = useQueryClient();
   const { currentUser } = useApp();
-  const isSystemUser = currentUser?.isSystemUser === true;
+  const { can } = usePermissions();
+  // Importing and removing entries; viewing is the page's own permission.
+  const canManage = can("previous_points.manage");
 
   const [label, setLabel] = useState(DEFAULT_LABEL);
   const [csvText, setCsvText] = useState("");
@@ -146,7 +149,7 @@ const AdminPreviousPoints = () => {
   const { data: users } = useQuery({
     queryKey: ["admin-users"],
     queryFn: api.admin.users.list,
-    enabled: isSystemUser,
+    enabled: canManage && can("users.view"),
   });
   const accountOptions = useMemo(
     () => [...(users ?? [])].filter((u) => !u.isDisabled).sort((a, b) => a.name.localeCompare(b.name)),
@@ -233,7 +236,7 @@ const AdminPreviousPoints = () => {
   const canPreview = !!parsed && parsed.problems.length === 0 && label.trim() !== "";
 
   return (
-    <AdminLayout>
+    <AdminLayout permission="previous_points.view">
       <div className="mx-auto max-w-6xl px-6 pt-8 pb-8 space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Previous Points</h1>
@@ -243,7 +246,7 @@ const AdminPreviousPoints = () => {
           </p>
         </div>
 
-        {isSystemUser && (
+        {canManage && (
           <div className="rounded-xl border border-border bg-card p-5 space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
@@ -477,13 +480,13 @@ const AdminPreviousPoints = () => {
                     <TableHead className="text-right">Points</TableHead>
                     <TableHead className="text-right">Correct scores</TableHead>
                     <TableHead>Updated</TableHead>
-                    {isSystemUser && <TableHead className="text-right">Actions</TableHead>}
+                    {canManage && <TableHead className="text-right">Actions</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {entries.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={isSystemUser ? 7 : 6} className="h-24 text-center text-sm text-muted-foreground">
+                      <TableCell colSpan={canManage ? 7 : 6} className="h-24 text-center text-sm text-muted-foreground">
                         No previous points imported yet.
                       </TableCell>
                     </TableRow>
@@ -498,7 +501,7 @@ const AdminPreviousPoints = () => {
                       <TableCell className="text-muted-foreground text-sm">
                         {format(new Date(e.updatedAt), "MMM d, yyyy")}
                       </TableCell>
-                      {isSystemUser && (
+                      {canManage && (
                         <TableCell className="text-right">
                           <Button variant="outline" size="sm" onClick={() => setPendingDeleteId(e.id)}>
                             <Trash2 className="h-3.5 w-3.5" />

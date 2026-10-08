@@ -3,6 +3,8 @@ import { clearAuth, getToken, saveAuth, tokenExpiresSoon } from "./auth";
 const BASE_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:63487";
 
+export const CHAT_HUB_URL = `${BASE_URL}/api/hubs/chat`;
+
 // ── Response types ────────────────────────────────────────────────────────────
 
 export type LoginMethod = "email" | "whatsapp";
@@ -163,6 +165,74 @@ export interface UserSummaryDto {
   lastLoginAt: string | null;
 }
 
+// Back-office permission keys; the backend's Services/Permissions.cs is the source of truth.
+export type Permission =
+  | "fixtures.manage"
+  | "participation.view"
+  | "users.view"
+  | "users.create"
+  | "users.edit"
+  | "users.status"
+  | "users.reset_password"
+  | "users.delete"
+  | "previous_points.view"
+  | "previous_points.manage"
+  | "audit.view"
+  | "settings.view"
+  | "settings.manage"
+  | "messages.broadcast";
+
+export interface MyPermissionsDto {
+  isSystemUser: boolean;
+  permissions: Record<string, boolean>;
+}
+
+export interface PermissionDefinitionDto {
+  key: Permission;
+  group: string;
+  label: string;
+  description: string;
+}
+
+export interface AdminPermissionsDto {
+  userId: string;
+  name: string;
+  email: string;
+  whatsAppName: string | null;
+  isDisabled: boolean;
+  // Only the permissions this admin has an exception for.
+  overrides: Record<string, boolean>;
+  effective: Record<string, boolean>;
+}
+
+export interface PermissionsOverviewDto {
+  permissions: PermissionDefinitionDto[];
+  defaults: Record<string, boolean>;
+  admins: AdminPermissionsDto[];
+}
+
+export interface PlayerParticipationDto {
+  userId: string;
+  name: string;
+  whatsAppName: string | null;
+  phoneNumber: string | null;
+  email: string;
+  // Predictions made for the week; equals the week's fixtureCount when complete.
+  predicted: number;
+  submittedAt: string | null;
+  lastLoginAt: string | null;
+}
+
+export interface WeekParticipationDto {
+  weekId: string;
+  weekName: string;
+  // Fixtures that can be predicted (postponed and cancelled ones left out).
+  fixtureCount: number;
+  // Earliest fixture still to start; null once all have started.
+  nextKickoff: string | null;
+  players: PlayerParticipationDto[];
+}
+
 export interface CreateUserPayload {
   name: string;
   email: string;
@@ -222,6 +292,50 @@ export interface UpdateScraperSettingsPayload {
   reminderHoursBeforeFirstGame: number;
 }
 
+// Chat. No emails or phone numbers here: every player can see these.
+export interface ChatUserDto {
+  id: string;
+  name: string;
+  whatsAppName: string | null;
+  isAdmin: boolean;
+  isOnline: boolean;
+}
+
+export interface ChatMessageDto {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  senderName: string;
+  // null once deleted.
+  body: string | null;
+  isAnnouncement: boolean;
+  clientId: string | null;
+  createdAt: string;
+  deletedAt: string | null;
+}
+
+export interface ConversationDto {
+  id: string;
+  other: ChatUserDto;
+  lastMessage: ChatMessageDto | null;
+  unreadCount: number;
+  myLastReadAt: string | null;
+  // Every message of mine sent up to here shows as "Seen".
+  otherLastReadAt: string | null;
+  lastMessageAt: string;
+}
+
+export interface MessagePageDto {
+  items: ChatMessageDto[];
+  hasMore: boolean;
+}
+
+export interface ReadReceiptDto {
+  conversationId: string;
+  userId: string;
+  readAt: string;
+}
+
 // ── Core request helper ───────────────────────────────────────────────────────
 
 type RefreshOutcome = "ok" | "expired" | "disabled";
@@ -257,6 +371,18 @@ export function refreshSession(): Promise<RefreshOutcome> {
     }
   })();
   return refreshInFlight;
+}
+
+// For connections that can't go through request() (the chat hub): a usable access token,
+// refreshed first if it's about to expire. Throws (and signs out) when the session is over.
+export async function getFreshToken(): Promise<string> {
+  const current = getToken();
+  if (current && !tokenExpiresSoon(current)) return current;
+  const outcome = await refreshSession();
+  if (outcome !== "ok") endSession(outcome);
+  const token = getToken();
+  if (!token) endSession("expired");
+  return token;
 }
 
 function endSession(outcome: Exclude<RefreshOutcome, "ok">): never {
@@ -390,6 +516,43 @@ export const api = {
     lockStatus: () => request<{ locked: boolean }>("/api/predictions/lock-status"),
   },
 
+  chat: {
+    conversations: () => request<ConversationDto[]>("/api/chat/conversations"),
+    conversation: (id: string) => request<ConversationDto>(`/api/chat/conversations/${encodeURIComponent(id)}`),
+    // Opens (or starts) the one conversation with this player.
+    start: (userId: string) =>
+      request<ConversationDto>("/api/chat/conversations", {
+        method: "POST",
+        body: JSON.stringify({ userId }),
+      }),
+    // Oldest first. Pass the oldest loaded message's id to get the page before it.
+    messages: (conversationId: string, before?: string) =>
+      request<MessagePageDto>(
+        `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages${
+          before ? `?before=${encodeURIComponent(before)}` : ""
+        }`,
+      ),
+    // clientId makes a retried send safe: the server returns the original instead of posting twice.
+    send: (conversationId: string, body: string, clientId: string) =>
+      request<ChatMessageDto>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ body, clientId }),
+      }),
+    markRead: (conversationId: string) =>
+      request<ReadReceiptDto>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/read`, {
+        method: "POST",
+      }),
+    remove: (messageId: string) =>
+      request<ChatMessageDto>(`/api/chat/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" }),
+    directory: () => request<ChatUserDto[]>("/api/chat/users"),
+    // Admins with "Send announcements". No userIds = every active player.
+    broadcast: (body: string, userIds?: string[]) =>
+      request<{ recipients: number }>("/api/chat/broadcast", {
+        method: "POST",
+        body: JSON.stringify({ body, userIds }),
+      }),
+  },
+
   leaderboard: {
     overall: () => request<LeaderboardEntryDto[]>("/api/leaderboard"),
     byWeek: (weekId: string) =>
@@ -414,6 +577,23 @@ export const api = {
         body: JSON.stringify({ closed }),
       }),
     status: () => request<AdminStatusDto>("/api/admin/status"),
+    permissions: {
+      // Any admin: what they themselves may do.
+      mine: () => request<MyPermissionsDto>("/api/admin/permissions/me"),
+      // The rest are the system admin's.
+      overview: () => request<PermissionsOverviewDto>("/api/admin/permissions"),
+      updateDefaults: (permissions: Record<string, boolean>) =>
+        request<PermissionsOverviewDto>("/api/admin/permissions/defaults", {
+          method: "PUT",
+          body: JSON.stringify({ permissions }),
+        }),
+      // null removes the admin's exception so they follow the default again.
+      updateAdmin: (userId: string, overrides: Record<string, boolean | null>) =>
+        request<PermissionsOverviewDto>(`/api/admin/permissions/users/${encodeURIComponent(userId)}`, {
+          method: "PUT",
+          body: JSON.stringify({ overrides }),
+        }),
+    },
     auditLogSettings: {
       get: () => request<AuditLogSettingsDto>("/api/admin/audit-log-settings"),
       set: (enabled: boolean) =>
@@ -480,6 +660,9 @@ export const api = {
         }),
     },
     weeks: {
+      // Every active player's prediction count for the week.
+      participation: (weekId: string) =>
+        request<WeekParticipationDto>(`/api/admin/weeks/${encodeURIComponent(weekId)}/participation`),
       create: (name: string, competition: string) =>
         request<MatchWeekDto>("/api/admin/weeks", {
           method: "POST",

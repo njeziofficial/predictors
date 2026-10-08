@@ -22,7 +22,7 @@ const Dashboard = () => {
   const [expandedWeek, setExpandedWeek] = useState<string | null>(null);
 
   const { data: allPredictions = [], error: predsError } = useQuery({
-    queryKey: ["predictions-all"],
+    queryKey: ["predictions", "all"],
     queryFn: () => api.predictions.mine(),
     enabled: !!currentUser,
   });
@@ -43,6 +43,8 @@ const Dashboard = () => {
     queryKey: ["previous-points-mine"],
     queryFn: api.users.previousPoints,
     enabled: !!currentUser,
+    // Changes only on an admin import, which the server announces (see lib/liveData).
+    staleTime: 5 * 60_000,
   });
 
   const weekSummaries = useMemo<WeekSummary[]>(() => {
@@ -63,7 +65,7 @@ const Dashboard = () => {
 
   const weeklyLeaderboardQueries = useQueries({
     queries: weekSummaries.map(s => ({
-      queryKey: ["leaderboard", s.weekId],
+      queryKey: ["leaderboard", "week", s.weekId],
       queryFn: () => api.leaderboard.byWeek(s.weekId),
       staleTime: 60_000,
       enabled: !!currentUser,

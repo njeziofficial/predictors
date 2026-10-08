@@ -43,7 +43,7 @@ const Leaderboard = () => {
   });
 
   const { data: weeklyData = [] } = useQuery({
-    queryKey: ["leaderboard-week", currentWeekData?.id],
+    queryKey: ["leaderboard", "week", currentWeekData?.id],
     queryFn: () => api.leaderboard.byWeek(currentWeekData!.id),
     enabled: !!currentUser && !!currentWeekData?.id,
   });

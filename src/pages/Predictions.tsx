@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useApp } from "@/context/AppContext";
 import { api, type FixtureDto, type OutcomeType, type PredictionItem } from "@/lib/api";
 import { POINTS } from "@/lib/constants";
+import { useLivePollInterval } from "@/lib/liveData";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Lock, Clock, Loader2 } from "lucide-react";
@@ -75,10 +76,13 @@ const Predictions = () => {
   const [picks, setPicks] = useState<Record<string, Pick>>({});
   const [weekLocked, setWeekLocked] = useState(false);
 
+  // An admin locking predictions is pushed as a "settings" change; polling is only the fallback.
+  // (Submitting is refused server-side while locked either way.)
+  const pollEvery = useLivePollInterval();
   const { data: lockStatus } = useQuery({
     queryKey: ["predictions-lock-status"],
     queryFn: api.predictions.lockStatus,
-    refetchInterval: 10_000,
+    refetchInterval: pollEvery(false),
     enabled: !!currentUser,
   });
 
@@ -98,7 +102,8 @@ const Predictions = () => {
     mutationFn: ({ weekId, predictions }: { weekId: string; predictions: PredictionItem[] }) =>
       api.predictions.submit(weekId, predictions),
     onSuccess: (_, vars) => {
-      queryClient.invalidateQueries({ queryKey: ["predictions", vars.weekId] });
+      // Every cached list of my predictions (this week's, and the all-weeks one History and Live use).
+      queryClient.invalidateQueries({ queryKey: ["predictions"] });
       toast.success(hasSubmitted ? "Predictions updated!" : "Predictions submitted!");
     },
     onError: (err) => {
@@ -139,11 +144,6 @@ const Predictions = () => {
 
   if (!currentUser) {
     navigate("/");
-    return null;
-  }
-
-  if (currentUser.role === "admin") {
-    navigate("/admin");
     return null;
   }
 

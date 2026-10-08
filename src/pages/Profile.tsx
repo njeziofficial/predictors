@@ -12,6 +12,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import NavBar from "@/components/NavBar";
 import AdminLayout from "@/components/AdminLayout";
+import { getArea } from "@/lib/permissions";
 
 const ProfileBody = ({ profile }: { profile: UserProfileDto }) => {
   const queryClient = useQueryClient();
@@ -190,6 +191,8 @@ const Profile = () => {
     queryKey: ["profile"],
     queryFn: api.users.me,
     enabled: !!currentUser,
+    // Only changes when you save it here, which refreshes it.
+    staleTime: 5 * 60_000,
   });
 
   if (!currentUser) return null;
@@ -212,7 +215,8 @@ const Profile = () => {
     </>
   );
 
-  if (currentUser.role === "admin") {
+  // Admins see their profile inside whichever side they're using.
+  if (currentUser.role === "admin" && getArea() === "backoffice") {
     return <AdminLayout>{body}</AdminLayout>;
   }
 

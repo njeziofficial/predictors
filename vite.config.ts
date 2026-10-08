@@ -19,6 +19,8 @@ export default defineConfig(({ mode }) => ({
       "/api": {
         target: "http://localhost:63487",
         changeOrigin: true,
+        // The chat hub (/api/hubs/chat) upgrades to a WebSocket.
+        ws: true,
       },
     },
     hmr: {

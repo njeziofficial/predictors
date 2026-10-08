@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "@/context/AppContext";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { hasMatchesInPlay, useLivePollInterval } from "@/lib/liveData";
 import type { PredictionDto } from "@/lib/api";
 import { Clock } from "lucide-react";
 import NavBar from "@/components/NavBar";
@@ -18,18 +19,21 @@ const MatchStatus = () => {
   const { currentUser } = useApp();
   const navigate = useNavigate();
 
+  // Scores arrive as server pushes; polling is only the fallback (see useLivePollInterval).
+  const pollEvery = useLivePollInterval();
+
   const { data: weeks = [] } = useQuery({
     queryKey: ["weeks"],
     queryFn: api.weeks.list,
-    refetchInterval: 5000,
+    refetchInterval: (query) => pollEvery(hasMatchesInPlay(query.state.data)),
     enabled: !!currentUser,
   });
 
   const { data: preds = [] } = useQuery({
-    queryKey: ["predictions"],
+    queryKey: ["predictions", "all"],
     queryFn: () => api.predictions.mine(),
     enabled: !!currentUser,
-    refetchInterval: 5000,
+    refetchInterval: pollEvery(hasMatchesInPlay(weeks)),
   });
 
   useEffect(() => {

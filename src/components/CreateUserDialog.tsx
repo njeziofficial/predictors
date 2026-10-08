@@ -40,7 +40,8 @@ const validate = (form: typeof EMPTY_FORM) => {
 
 type Created = { name: string; role: CreateUserPayload["role"]; password: string | null };
 
-const CreateUserDialog = () => {
+// Only the system admin may create admins (`allowAdmin`); the backend refuses it for anyone else.
+const CreateUserDialog = ({ allowAdmin = false }: { allowAdmin?: boolean }) => {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -167,6 +168,7 @@ const CreateUserDialog = () => {
               {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
             </div>
 
+            {allowAdmin && (
             <div className="space-y-1.5">
               <Label>Role</Label>
               <Select value={form.role} onValueChange={(v) => setField("role", v as CreateUserPayload["role"])}>
@@ -179,6 +181,7 @@ const CreateUserDialog = () => {
                 </SelectContent>
               </Select>
             </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">

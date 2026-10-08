@@ -111,7 +111,7 @@ const Login = () => {
       if (res.mustResetPassword) {
         navigate("/reset-password-required");
       } else {
-        navigate(res.role === "admin" ? "/admin" : "/predict");
+        navigate(res.role === "admin" ? "/choose" : "/predict");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed. Please try again.");

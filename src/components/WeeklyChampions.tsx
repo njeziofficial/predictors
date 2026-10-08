@@ -69,7 +69,7 @@ function useWeeklyChampions(
   const results = useQueries({
     queries: candidates.map(w => ({
       // Same key as the weekly standings so both views share the cache.
-      queryKey: ["leaderboard-week", w.id],
+      queryKey: ["leaderboard", "week", w.id],
       queryFn: () => api.leaderboard.byWeek(w.id),
       staleTime: 60_000,
       enabled: opts.enabled,
