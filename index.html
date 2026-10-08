@@ -6,18 +6,44 @@
     <title>Octopus Prediction</title>
     <meta name="description" content="Octopus Prediction — the ultimate football prediction game">
     <meta name="author" content="Octopus Prediction" />
+    <meta name="theme-color" content="#090c11" />
 
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Octopus Prediction">
     <meta property="og:description" content="The ultimate football prediction game">
+    <meta property="og:image" content="/og-image.jpg">
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Octopus Prediction">
     <meta name="twitter:description" content="The ultimate football prediction game">
-  <link rel="icon" type="image/x-icon" href="/favicon.ico">
-</head>
+    <meta name="twitter:image" content="/og-image.jpg">
+
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="preload" as="image" href="/brand/logo-mark.webp" type="image/webp">
+
+    <!-- Boot splash: shown until React mounts into #root and replaces it. -->
+    <style>
+      html, body { background: #090c11; }
+      .boot-splash { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+      .boot-splash__ring { position: relative; width: 96px; height: 96px; }
+      .boot-splash__ring::before { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(233, 89, 12, 0.15); border-top-color: #e9590c; animation: boot-spin 0.9s linear infinite; }
+      .boot-splash__ring img { position: absolute; left: 16%; top: 16%; width: 68%; height: 68%; animation: boot-pulse 1.6s ease-in-out infinite; }
+      .boot-splash__name { font: 600 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; letter-spacing: 0.2em; text-transform: uppercase; color: #e9590c; }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+      @keyframes boot-pulse { 0%, 100% { transform: scale(0.92); opacity: 0.85; } 50% { transform: scale(1); opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) { .boot-splash__ring::before, .boot-splash__ring img { animation: none; } }
+    </style>
+  </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot-splash" role="status" aria-label="Loading Octopus Prediction">
+        <div class="boot-splash__ring"><img src="/brand/logo-mark.webp" alt=""></div>
+        <span class="boot-splash__name">Octopus Prediction</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

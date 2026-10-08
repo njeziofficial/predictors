@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ClipboardList, Trophy, Radio, Clock, User, LogOut, LayoutDashboard, MessageCircle } from "lucide-react";
+import { BrandLogo } from "@/components/Brand";
 import { useApp } from "@/context/AppContext";
 import { useChat } from "@/context/ChatContext";
 import { setArea } from "@/lib/permissions";
@@ -38,12 +39,7 @@ const NavBar = () => {
     <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
       {/* Narrow screens: brand and account actions on top, the sections in a scrolling row below. */}
       <div className="flex flex-wrap items-center justify-between gap-y-2 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="h-7 w-7 rounded bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground text-xs font-bold">OP</span>
-          </div>
-          <span className="font-bold text-foreground">Octopus Prediction</span>
-        </div>
+        <BrandLogo />
         <nav className="order-last -mx-1 flex w-full gap-1 overflow-x-auto px-1 [scrollbar-width:none] lg:order-none lg:mx-0 lg:w-auto lg:px-0">
           {items.map((item) => {
             const active = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);

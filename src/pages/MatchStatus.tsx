@@ -7,6 +7,7 @@ import { hasMatchesInPlay, useLivePollInterval } from "@/lib/liveData";
 import type { PredictionDto } from "@/lib/api";
 import { Clock } from "lucide-react";
 import NavBar from "@/components/NavBar";
+import { BrandLoader } from "@/components/Brand";
 
 function predLabel(pred: PredictionDto): string {
   if (pred.outcome === "correct_score") {
@@ -46,9 +47,7 @@ const MatchStatus = () => {
     return (
       <div className="min-h-screen bg-background">
         <NavBar />
-        <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground text-sm">Loading match status…</p>
-        </div>
+        <BrandLoader className="h-64" label="Loading match status…" />
       </div>
     );
   }

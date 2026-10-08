@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { Loader2, Trash2, Upload, Eye, Copy, Check, FileDown } from "lucide-react";
+import { BrandLoader } from "@/components/Brand";
 import {
   api,
   type PreviousPointsImportRow,
@@ -454,9 +455,7 @@ const AdminPreviousPoints = () => {
         )}
 
         {isLoading && (
-          <div className="flex items-center justify-center h-32">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
+          <BrandLoader className="h-32" />
         )}
 
         {error && (

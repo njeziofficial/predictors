@@ -13,9 +13,9 @@ import {
   KeyRound,
   Trophy,
   ShieldOff,
-  Loader2,
   MessageCircle,
 } from "lucide-react";
+import { BrandLoader, BrandLogo, BrandMark } from "@/components/Brand";
 import { useApp } from "@/context/AppContext";
 import { useChat } from "@/context/ChatContext";
 import { setArea, usePermissions } from "@/lib/permissions";
@@ -94,9 +94,7 @@ const AdminLayout = ({
   const allowed = systemOnly ? isSystemUser : !permission || can(permission);
 
   const content = isLoading ? (
-    <div className="flex h-64 items-center justify-center">
-      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-    </div>
+    <BrandLoader className="h-64" />
   ) : allowed ? (
     children
   ) : (
@@ -124,12 +122,7 @@ const AdminLayout = ({
       {/* Phones: a top bar with the sections in a scrolling row instead of the sidebar */}
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur md:hidden">
         <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground text-xs font-bold">OP</span>
-            </div>
-            <span className="font-bold text-foreground text-sm">Admin CMS</span>
-          </div>
+          <BrandLogo label="Admin CMS" />
           <div className="flex items-center gap-1">
             <button
               onClick={goToApp}
@@ -168,9 +161,7 @@ const AdminLayout = ({
 
       <aside className="sticky top-0 hidden h-screen w-56 shrink-0 border-r border-border md:flex md:flex-col">
         <div className="flex items-center gap-2 px-4 py-4 border-b border-border">
-          <div className="h-7 w-7 rounded bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground text-xs font-bold">OP</span>
-          </div>
+          <BrandMark className="h-9 w-9" />
           <div className="min-w-0">
             <span className="block font-bold text-foreground text-sm">Admin CMS</span>
             <span className="block truncate text-[10px] text-muted-foreground">

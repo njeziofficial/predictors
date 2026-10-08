@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { Loader2, User as UserIcon, KeyRound } from "lucide-react";
+import { BrandLoader } from "@/components/Brand";
 import { useApp } from "@/context/AppContext";
 import { api, type UserProfileDto } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -200,9 +201,7 @@ const Profile = () => {
   const body = (
     <>
       {isLoading && (
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
+        <BrandLoader className="h-64" />
       )}
       {error && (
         <div className="mx-auto max-w-2xl px-4 pt-12">

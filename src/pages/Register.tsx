@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { BrandMark } from "@/components/Brand";
 import { useApp } from "@/context/AppContext";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -67,6 +68,7 @@ const Register = () => {
     <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
+          <BrandMark className="mx-auto mb-2 h-14 w-14" />
           <CardTitle className="text-2xl">Create Account</CardTitle>
           <CardDescription>Join Octopus Prediction</CardDescription>
         </CardHeader>

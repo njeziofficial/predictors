@@ -10,6 +10,7 @@ import { api, type LoginMethod } from "@/lib/api";
 import { POINTS } from "@/lib/constants";
 import { toast } from "sonner";
 import { Target, Zap, TrendingUp, Mail, MessageCircle, Lock, Loader2, AlertCircle, ArrowRight } from "lucide-react";
+import { BrandLogo } from "@/components/Brand";
 
 const FEATURES = [
   { icon: Target, title: "Predict every match", text: "Pick outcomes for each fixture before kick-off." },
@@ -137,12 +138,7 @@ const Login = () => {
       <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col lg:flex-row lg:items-center lg:gap-16">
         {/* Brand and pitch */}
         <section className="flex-1 px-6 pt-12 lg:px-10 lg:py-12 fade-in-up">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary shadow-lg shadow-primary/30">
-              <span className="text-sm font-bold text-primary-foreground">OP</span>
-            </div>
-            <span className="text-sm font-semibold tracking-wide">Octopus Prediction</span>
-          </div>
+          <BrandLogo size="md" />
 
           <h1 className="mt-10 text-4xl font-bold leading-[1.1] tracking-tight lg:text-5xl">
             Call the results.

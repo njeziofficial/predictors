@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import {
-  Loader2,
   MessageCircle,
   Phone,
   Copy,
@@ -15,6 +14,7 @@ import {
   Users,
   Search,
 } from "lucide-react";
+import { BrandLoader } from "@/components/Brand";
 import { api, type PlayerParticipationDto } from "@/lib/api";
 import { whatsAppLink } from "@/lib/phone";
 import { activeWeek, sortWeeks } from "@/lib/weeks";
@@ -152,9 +152,7 @@ const AdminParticipation = () => {
         )}
 
         {(isLoading || weeksLoading) && (
-          <div className="flex h-40 items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
+          <BrandLoader className="h-40" />
         )}
 
         {data && (

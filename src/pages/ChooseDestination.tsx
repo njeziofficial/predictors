@@ -16,6 +16,7 @@ import {
   LogOut,
   Loader2,
 } from "lucide-react";
+import { BrandLogo } from "@/components/Brand";
 import { useApp } from "@/context/AppContext";
 import { setArea, usePermissions } from "@/lib/permissions";
 import type { Permission } from "@/lib/api";
@@ -75,12 +76,7 @@ const ChooseDestination = () => {
 
       <div className="relative mx-auto flex min-h-screen max-w-4xl flex-col px-6 py-10">
         <header className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary shadow-lg shadow-primary/30">
-              <span className="text-sm font-bold text-primary-foreground">OP</span>
-            </div>
-            <span className="text-sm font-semibold tracking-wide">Octopus Prediction</span>
-          </div>
+          <BrandLogo size="md" />
           <button
             onClick={handleLogout}
             className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"

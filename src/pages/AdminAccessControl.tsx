@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, ShieldCheck, Users, UserCog, Lock, RotateCcw, Info } from "lucide-react";
+import { BrandLoader } from "@/components/Brand";
 import { api, type AdminPermissionsDto, type PermissionDefinitionDto, type PermissionsOverviewDto } from "@/lib/api";
 import AdminLayout from "@/components/AdminLayout";
 import { Switch } from "@/components/ui/switch";
@@ -99,9 +100,7 @@ const AdminAccessControl = () => {
         </div>
 
         {isLoading && (
-          <div className="flex h-40 items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
+          <BrandLoader className="h-40" />
         )}
         {error && (
           <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">

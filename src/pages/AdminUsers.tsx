@@ -18,6 +18,7 @@ import {
   ChevronRight,
   X,
 } from "lucide-react";
+import { BrandLoader } from "@/components/Brand";
 import { api, type UserSummaryDto } from "@/lib/api";
 import AdminLayout from "@/components/AdminLayout";
 import CreateUserDialog from "@/components/CreateUserDialog";
@@ -339,9 +340,7 @@ const AdminUsers = () => {
         </div>
 
         {isLoading && (
-          <div className="flex items-center justify-center h-32">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
+          <BrandLoader className="h-32" />
         )}
 
         {error && (

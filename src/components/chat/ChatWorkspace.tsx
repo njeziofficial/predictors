@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, MessagesSquare } from "lucide-react";
+import { MessagesSquare } from "lucide-react";
+import { BrandLoader } from "@/components/Brand";
 import { toast } from "sonner";
 import { useApp } from "@/context/AppContext";
 import { api, type ChatUserDto, type ConversationDto } from "@/lib/api";
@@ -80,9 +81,7 @@ const ChatWorkspace = ({ basePath }: { basePath: string }) => {
         {active ? (
           <ChatThread key={active.id} conversation={active} onBack={() => navigate(basePath)} />
         ) : conversationId && !notFound ? (
-          <div className="flex h-full items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
+          <BrandLoader size="sm" className="h-full" />
         ) : (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center">
             <div className="relative">

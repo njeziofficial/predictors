@@ -10,6 +10,7 @@ import { useLivePollInterval } from "@/lib/liveData";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Lock, Clock, Loader2 } from "lucide-react";
+import { BrandLoader } from "@/components/Brand";
 import NavBar from "@/components/NavBar";
 import { LatestChampions } from "@/components/WeeklyChampions";
 import MyStanding from "@/components/MyStanding";
@@ -151,9 +152,7 @@ const Predictions = () => {
     return (
       <div className="min-h-screen bg-background">
         <NavBar />
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
+        <BrandLoader className="h-64" />
       </div>
     );
   }

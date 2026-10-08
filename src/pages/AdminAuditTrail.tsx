@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Loader2, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { BrandLoader } from "@/components/Brand";
 import { api } from "@/lib/api";
 import AdminLayout from "@/components/AdminLayout";
 import { useApp } from "@/context/AppContext";
@@ -66,9 +67,7 @@ const AdminAuditTrail = () => {
         </div>
 
         {isLoading && !data && (
-          <div className="flex items-center justify-center h-32">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
+          <BrandLoader className="h-32" />
         )}
 
         {error && (
