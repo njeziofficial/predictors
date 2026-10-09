@@ -13,7 +13,8 @@
   },
   "vars": {
     // Public origin of the backend API (no trailing slash), e.g. "https://api.example.com".
-    "BACKEND_URL": "https://undelusively-unscandalized-melissia.ngrok-free.dev"
+    // "BACKEND_URL": "https://undelusively-unscandalized-melissia.ngrok-free.dev"
+    "BACKEND_URL": "https://predictors-backend.onrender.com"
   },
   "observability": { "enabled": true }
 }
