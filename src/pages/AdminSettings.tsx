@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
-import { Loader2, Radio, Settings as SettingsIcon, BellRing, Lock, LockOpen, ShieldAlert, UserPlus, UserX, Eye } from "lucide-react";
+import { Loader2, Radio, Settings as SettingsIcon, BellRing, Lock, LockOpen, ShieldAlert, UserPlus, UserX, Eye, ListChecks } from "lucide-react";
 import { BrandLoader } from "@/components/Brand";
 import { api } from "@/lib/api";
+import { DEFAULT_PREDICTION_RULES, type PredictionRules } from "@/lib/predictionRules";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +36,7 @@ const AdminSettings = () => {
   const { currentUser } = useApp();
   const { can } = usePermissions();
   const canManage = can("settings.manage");
+  const canManageRules = can("predictions.rules");
 
   const [enabled, setEnabled] = useState(true);
   const [pollIntervalSeconds, setPollIntervalSeconds] = useState(60);
@@ -43,6 +45,7 @@ const AdminSettings = () => {
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderHoursBeforeFirstGame, setReminderHoursBeforeFirstGame] = useState(24);
   const [seeded, setSeeded] = useState(false);
+  const [rules, setRules] = useState<PredictionRules>(DEFAULT_PREDICTION_RULES);
 
   const { data: settings, isLoading, error } = useQuery({
     queryKey: ["admin-settings"],
@@ -73,6 +76,30 @@ const AdminSettings = () => {
     setReminderHoursBeforeFirstGame(settings.reminderHoursBeforeFirstGame);
     setSeeded(true);
   }, [settings, seeded]);
+
+  // Follows the saved rules (including another admin's change pushed live) until edited here.
+  const [rulesDirty, setRulesDirty] = useState(false);
+  useEffect(() => {
+    if (settings?.predictionRules && !rulesDirty) setRules(settings.predictionRules);
+  }, [settings, rulesDirty]);
+
+  const setRule = (key: keyof PredictionRules, value: boolean) => {
+    setRules((prev) => ({ ...prev, [key]: value }));
+    setRulesDirty(true);
+  };
+
+  const { mutate: saveRules, isPending: isSavingRules } = useMutation({
+    mutationFn: () => api.admin.setPredictionRules(rules),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(["admin-settings"], saved);
+      queryClient.invalidateQueries({ queryKey: ["predictions-lock-status"] });
+      setRulesDirty(false);
+      toast.success("Prediction rules saved.");
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to save prediction rules.");
+    },
+  });
 
   const { mutate: save, isPending: isSaving } = useMutation({
     mutationFn: () =>
@@ -190,6 +217,109 @@ const AdminSettings = () => {
             </span>
           </div>
         </div>
+
+        {/* Its own permission, so it sits outside the settings.manage fieldset below. */}
+        <fieldset disabled={!canManageRules} className="min-w-0 rounded-xl border border-border bg-card p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <ListChecks className="h-4 w-4 text-primary" />
+            <span className="text-sm font-semibold">Prediction rules</span>
+          </div>
+
+          {!canManageRules && (
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-2 text-xs text-muted-foreground">
+              <Eye className="h-3.5 w-3.5 shrink-0" />
+              View only. Only the system admin, or admins given "Change prediction rules", can change these.
+            </div>
+          )}
+
+          {(
+            [
+              {
+                key: "allowPartialPredictions",
+                label: "Allow incomplete predictions",
+                help: "Off: players must predict every match still open in the week before they can submit. On: they can submit any number, and are warned that their predictions are incomplete.",
+              },
+              {
+                key: "predictionsFinal",
+                label: "Predictions are final",
+                help: "Once a player submits a prediction it can never be changed. They're shown a clear warning before submitting. If incomplete predictions are allowed, matches they skipped can still be predicted while open.",
+              },
+              {
+                key: "lockWeekAtFirstKickoff",
+                label: "Lock the whole week at first kickoff",
+                help: "As soon as the week's first match starts, every prediction for that week is locked, including matches yet to play. Off: each match locks at its own kickoff.",
+              },
+              {
+                key: "allowLatePredictions",
+                label: "Allow late predictions",
+                help: "Players who hadn't predicted anything when the week locked can still predict the matches yet to start, in one submission. Only applies while the week locks at first kickoff.",
+                disabled: !rules.lockWeekAtFirstKickoff,
+              },
+            ] as { key: keyof PredictionRules; label: string; help: string; disabled?: boolean }[]
+          ).map((r) => (
+            <div key={r.key} className="flex items-start justify-between gap-4">
+              <div>
+                <Label htmlFor={`rule-${r.key}`} className={r.disabled ? "text-muted-foreground" : ""}>
+                  {r.label}
+                </Label>
+                <p className="text-xs text-muted-foreground">{r.help}</p>
+              </div>
+              <Switch
+                id={`rule-${r.key}`}
+                checked={rules[r.key]}
+                onCheckedChange={(v) => setRule(r.key, v)}
+                disabled={r.disabled}
+              />
+            </div>
+          ))}
+
+          {canManageRules && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button className="w-full" disabled={!rulesDirty || isSavingRules}>
+                  {isSavingRules && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Save prediction rules
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Apply prediction rules?</AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+                      <li>
+                        {rules.allowPartialPredictions
+                          ? "Players may submit incomplete predictions."
+                          : "Players must predict every open match."}
+                      </li>
+                      <li>
+                        {rules.predictionsFinal
+                          ? "Submitted predictions can never be changed."
+                          : "Players can change predictions until they lock."}
+                      </li>
+                      <li>
+                        {rules.lockWeekAtFirstKickoff
+                          ? "The whole week locks when its first match kicks off."
+                          : "Each match locks at its own kickoff."}
+                      </li>
+                      {rules.lockWeekAtFirstKickoff && (
+                        <li>
+                          {rules.allowLatePredictions
+                            ? "Players who hadn't predicted may still predict matches yet to start."
+                            : "Players who hadn't predicted miss the whole week."}
+                        </li>
+                      )}
+                      <li>This applies to every player straight away, including weeks already in progress.</li>
+                    </ul>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => saveRules()}>Apply</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </fieldset>
 
         {!canManage && (
           <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-2 text-xs text-muted-foreground">

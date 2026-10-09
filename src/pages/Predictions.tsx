@@ -9,11 +9,22 @@ import { POINTS } from "@/lib/constants";
 import { useLivePollInterval } from "@/lib/liveData";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Lock, Clock, Loader2 } from "lucide-react";
+import { Lock, Clock, Loader2, AlertTriangle, Info } from "lucide-react";
 import { BrandLoader } from "@/components/Brand";
 import NavBar from "@/components/NavBar";
 import { LatestChampions } from "@/components/WeeklyChampions";
 import MyStanding from "@/components/MyStanding";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import { DEFAULT_PREDICTION_RULES, isFixtureOpen, weekPredictionState } from "@/lib/predictionRules";
 
 type Pick = { outcome: OutcomeType; homeGoals?: number; awayGoals?: number };
 
@@ -24,25 +35,14 @@ const outcomeOptions: { value: OutcomeType; label: string; pts: number; color: s
   { value: "correct_score", label: "Score", pts: POINTS.correct_score, color: "border-primary text-primary" },
 ];
 
-function isWeekLocked(fixtures: FixtureDto[]): boolean {
-  const preMatch = fixtures.filter((f) => f.status === "pre_match");
-  if (preMatch.length === 0) return true;
-  const earliest = preMatch.reduce((a, b) =>
-    new Date(a.kickoff) < new Date(b.kickoff) ? a : b
-  );
-  return new Date() >= new Date(new Date(earliest.kickoff).getTime() - 30_000);
-}
+const pickLabel = (pick: Pick) =>
+  pick.outcome === "correct_score"
+    ? `Score ${pick.homeGoals}-${pick.awayGoals}`
+    : outcomeOptions.find((o) => o.value === pick.outcome)?.label ?? pick.outcome;
 
-function getLockTime(fixtures: FixtureDto[]): Date | null {
-  const preMatch = fixtures.filter((f) => f.status === "pre_match");
-  if (preMatch.length === 0) return null;
-  const earliest = preMatch.reduce((a, b) =>
-    new Date(a.kickoff) < new Date(b.kickoff) ? a : b
-  );
-  return new Date(new Date(earliest.kickoff).getTime() - 30_000);
-}
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : word.endsWith("ch") ? "es" : "s"}`;
 
-const CountdownTimer = ({ lockTime }: { lockTime: Date }) => {
+const CountdownTimer = ({ lockTime, label }: { lockTime: Date; label: string }) => {
   const [timeLeft, setTimeLeft] = useState(() => Math.max(0, lockTime.getTime() - Date.now()));
 
   useEffect(() => {
@@ -62,7 +62,7 @@ const CountdownTimer = ({ lockTime }: { lockTime: Date }) => {
   return (
     <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card border border-border">
       <Lock className="h-4 w-4 text-primary" />
-      <span className="text-sm text-muted-foreground">Locks in</span>
+      <span className="text-sm text-muted-foreground">{label}</span>
       <span className="font-mono font-bold text-primary text-lg">{pad(mins)}:{pad(secs)}</span>
     </div>
   );
@@ -75,9 +75,11 @@ const Predictions = () => {
 
   const [selectedWeekId, setSelectedWeekId] = useState<string>("");
   const [picks, setPicks] = useState<Record<string, Pick>>({});
-  const [weekLocked, setWeekLocked] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+  // The submission waiting on the warning prompt (final and/or incomplete predictions).
+  const [pendingSubmit, setPendingSubmit] = useState<PredictionItem[] | null>(null);
 
-  // An admin locking predictions is pushed as a "settings" change; polling is only the fallback.
+  // An admin locking predictions or changing the rules is pushed as a "settings" change; polling is only the fallback.
   // (Submitting is refused server-side while locked either way.)
   const pollEvery = useLivePollInterval();
   const { data: lockStatus } = useQuery({
@@ -105,7 +107,7 @@ const Predictions = () => {
     onSuccess: (_, vars) => {
       // Every cached list of my predictions (this week's, and the all-weeks one History and Live use).
       queryClient.invalidateQueries({ queryKey: ["predictions"] });
-      toast.success(hasSubmitted ? "Predictions updated!" : "Predictions submitted!");
+      toast.success(hasSubmitted && !rules.predictionsFinal ? "Predictions updated!" : "Predictions submitted!");
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "Failed to submit predictions.");
@@ -135,13 +137,11 @@ const Predictions = () => {
     setPicks(map);
   }, [existingPreds, selectedWeekId]);
 
-  // Poll lock state every second
+  // Re-check kickoff locks every second.
   useEffect(() => {
-    if (!selectedWeek) return;
-    const interval = setInterval(() => setWeekLocked(isWeekLocked(selectedWeek.fixtures)), 1000);
-    setWeekLocked(isWeekLocked(selectedWeek?.fixtures ?? []));
+    const interval = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(interval);
-  }, [selectedWeekId, weeks]);
+  }, []);
 
   if (!currentUser) {
     navigate("/");
@@ -186,21 +186,27 @@ const Predictions = () => {
 
   if (!selectedWeek) return null;
 
+  const rules = lockStatus?.rules ?? DEFAULT_PREDICTION_RULES;
   const globalLocked = !!lockStatus?.locked;
-  const locked = weekLocked || globalLocked;
-  const hasSubmitted = !!existingPreds?.length;
-  const lockTime = getLockTime(selectedWeek.fixtures);
+  const savedIds = new Set((existingPreds ?? []).map((p) => p.fixtureId));
+  const hasSubmitted = savedIds.size > 0;
+  const weekState = weekPredictionState(selectedWeek.fixtures, savedIds, rules, globalLocked, now);
+  const locked = weekState.lockReason !== null;
   const sortedFixtures = [...selectedWeek.fixtures].sort(
     (a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime()
   );
 
-  const editableCount = sortedFixtures.filter((f) => f.status === "pre_match").length;
+  const openFixtures = weekState.openFixtures;
+  const openCount = openFixtures.length;
   const weekEnded = sortedFixtures.length > 0 && sortedFixtures.every((f) => f.status !== "pre_match" && f.status !== "live");
-  const predictedCount = Object.keys(picks).length;
+  const predictedCount = openFixtures.filter((f) => picks[f.id]).length;
+  const missingFixtures = openFixtures.filter((f) => !picks[f.id]);
   const potentialPts = Object.values(picks).reduce((sum, p) => sum + POINTS[p.outcome], 0);
+  // Skipped matches can be filled in later unless this submission is the player's one late entry,
+  // or the whole week locks at its first kickoff and that has already happened.
+  const canAddSkippedLater = !weekState.lateEntry;
 
   // Group by day
-  const now = new Date();
   const groupedByDay: { label: string; fixtures: FixtureDto[] }[] = [];
   sortedFixtures.forEach((f) => {
     const d = new Date(f.kickoff);
@@ -235,23 +241,32 @@ const Predictions = () => {
   };
 
   const handleSubmit = () => {
-    const editable = sortedFixtures.filter((f) => f.status === "pre_match");
-    const missing = editable.filter((f) => !picks[f.id]);
-    if (missing.length > 0) {
-      toast.error(`You still have ${missing.length} match${missing.length > 1 ? "es" : ""} to predict.`);
+    if (!rules.allowPartialPredictions && missingFixtures.length > 0) {
+      toast.error(`You still have ${plural(missingFixtures.length, "match")} to predict. Every match must be predicted.`);
       return;
     }
+    // Only matches this player may still change: under "final" rules, saved ones are left out.
+    const editable = openFixtures.filter((f) => weekState.editableIds.has(f.id) && picks[f.id]);
     for (const f of editable) {
       const p = picks[f.id];
-      if (p?.outcome === "correct_score" && (p.homeGoals === undefined || p.awayGoals === undefined)) {
+      if (p.outcome === "correct_score" && (p.homeGoals === undefined || p.awayGoals === undefined)) {
         toast.error(`Enter the score for ${f.homeTeam} vs ${f.awayTeam}.`);
         return;
       }
     }
-    const predictions: PredictionItem[] = editable
-      .filter((f) => picks[f.id])
-      .map((f) => ({ fixtureId: f.id, ...picks[f.id] }));
-    submitMutation({ weekId: selectedWeekId, predictions });
+    if (editable.length === 0) {
+      toast.error("Pick at least one match to predict.");
+      return;
+    }
+    const predictions: PredictionItem[] = editable.map((f) => ({ fixtureId: f.id, ...picks[f.id] }));
+    // Final or incomplete predictions need the player to confirm they understand.
+    if (rules.predictionsFinal || missingFixtures.length > 0) setPendingSubmit(predictions);
+    else submitMutation({ weekId: selectedWeekId, predictions });
+  };
+
+  const confirmSubmit = () => {
+    if (pendingSubmit) submitMutation({ weekId: selectedWeekId, predictions: pendingSubmit });
+    setPendingSubmit(null);
   };
 
   return (
@@ -269,16 +284,40 @@ const Predictions = () => {
               {selectedWeek.name.replace(`${selectedWeek.competition} — `, "")} · {selectedWeek.competition}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {predictedCount}/{editableCount} predicted · +{potentialPts} pts potential
+              {predictedCount}/{openCount} predicted · +{potentialPts} pts potential
             </p>
           </div>
-          {!locked && lockTime && <CountdownTimer lockTime={lockTime} />}
+          {weekState.nextLockAt && (
+            <CountdownTimer
+              lockTime={weekState.nextLockAt}
+              label={weekState.nextLockIsWeek ? "Week locks in" : "Next match locks in"}
+            />
+          )}
+        </div>
+
+        {/* The rules in force, so nobody is surprised by them */}
+        <div className="flex flex-wrap gap-1.5 text-[11px]">
+          <span className="px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
+            {rules.allowPartialPredictions ? "You may skip matches" : "Every match must be predicted"}
+          </span>
+          {rules.predictionsFinal && (
+            <span className="px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">Predictions are final once submitted</span>
+          )}
+          <span className="px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
+            {rules.lockWeekAtFirstKickoff ? "Week locks at first kickoff" : "Each match locks at its kickoff"}
+          </span>
+          {rules.lockWeekAtFirstKickoff && rules.allowLatePredictions && (
+            <span className="px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">Late predictions allowed</span>
+          )}
         </div>
 
         {/* Week selector */}
         <div className="flex gap-2 overflow-x-auto pb-1">
           {weeks.map((w) => {
-            const wLocked = isWeekLocked(w.fixtures);
+            const wLocked =
+              w.id === selectedWeek.id
+                ? locked
+                : weekPredictionState(w.fixtures, new Set(), rules, globalLocked, now).lockReason !== null;
             return (
               <button
                 key={w.id}
@@ -300,7 +339,26 @@ const Predictions = () => {
         {hasSubmitted && !locked && (
           <div className="flex items-center gap-2 rounded-lg bg-success/10 border border-success/30 px-4 py-2.5 text-sm text-success fade-in-up">
             <span>✓</span>
-            <span>Predictions saved! You can still edit until lock time.</span>
+            <span>
+              {rules.predictionsFinal
+                ? `Predictions saved. They're final and can't be changed.${
+                    rules.allowPartialPredictions && weekState.editableIds.size > 0
+                      ? " You can still predict the matches you skipped."
+                      : ""
+                  }`
+                : "Predictions saved! You can still edit until lock time."}
+            </span>
+          </div>
+        )}
+
+        {/* Late entry: the week has locked for everyone who predicted, but not for this player */}
+        {weekState.lateEntry && !locked && (
+          <div className="flex items-start gap-2 rounded-lg bg-primary/10 border border-primary/30 px-4 py-2.5 text-sm text-primary fade-in-up">
+            <Info className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              This week has already kicked off. You hadn't predicted yet, so you can still predict the matches that
+              haven't started. You get one submission: after it, the week is locked for you.
+            </span>
           </div>
         )}
 
@@ -309,9 +367,11 @@ const Predictions = () => {
           <div className="flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-2.5 text-sm text-destructive fade-in-up">
             <Lock className="h-4 w-4" />
             <span>
-              {globalLocked
+              {weekState.lockReason === "admin"
                 ? "Predictions are currently locked by an admin"
-                : `Predictions locked — ${weekEnded ? "matches have ended" : "matches have started"}`}
+                : weekState.lockReason === "week_started"
+                  ? "Predictions for this week locked when its first match kicked off"
+                  : `Predictions locked — ${weekEnded ? "matches have ended" : "matches have started"}`}
             </span>
           </div>
         )}
@@ -326,7 +386,9 @@ const Predictions = () => {
             <div className="space-y-3">
               {group.fixtures.map((fixture, mi) => {
                 const pick = picks[fixture.id];
-                const matchLocked = fixture.status !== "pre_match";
+                const matchLocked = !isFixtureOpen(fixture, now);
+                const editable = weekState.editableIds.has(fixture.id);
+                const savedFinal = rules.predictionsFinal && savedIds.has(fixture.id);
                 const score = fixture.liveScore ?? fixture.finalScore;
 
                 return (
@@ -339,14 +401,19 @@ const Predictions = () => {
                       <span className="text-xs text-muted-foreground">
                         {format(new Date(fixture.kickoff), "EEE, MMM d")} · {format(new Date(fixture.kickoff), "HH:mm")}
                       </span>
-                      {pick && !matchLocked && !locked && (
+                      {pick && editable && (
                         <span className="text-xs text-primary font-medium">+{POINTS[pick.outcome]}pts potential</span>
                       )}
-                      {pick && (matchLocked || locked) && (
+                      {pick && !editable && (
                         <span className="text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3 inline mr-1" />
+                          {savedFinal && !matchLocked ? (
+                            <Lock className="h-3 w-3 inline mr-1" />
+                          ) : (
+                            <Clock className="h-3 w-3 inline mr-1" />
+                          )}
                           {pick.outcome.replace("_", " ")}
                           {pick.outcome === "correct_score" && ` (${pick.homeGoals}-${pick.awayGoals})`}
+                          {savedFinal && !matchLocked && " · final"}
                         </span>
                       )}
                     </div>
@@ -375,7 +442,7 @@ const Predictions = () => {
                     </div>
 
                     {/* Prediction buttons */}
-                    {!matchLocked && !locked && (
+                    {editable && (
                       <>
                         <div className="grid grid-cols-4 gap-2">
                           {outcomeOptions.map((opt) => {
@@ -429,7 +496,7 @@ const Predictions = () => {
           </div>
         ))}
 
-        {!locked && editableCount > 0 && (
+        {weekState.editableIds.size > 0 && (
           <div className="pt-2 pb-6 fade-in-up">
             <Button
               className="w-full h-12 text-base rounded-xl"
@@ -437,11 +504,86 @@ const Predictions = () => {
               disabled={isSubmitting}
             >
               {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {hasSubmitted ? "Update Predictions" : "Submit All Predictions"} ({predictedCount}/{editableCount})
+              {hasSubmitted && !rules.predictionsFinal
+                ? "Update Predictions"
+                : rules.allowPartialPredictions
+                  ? "Submit Predictions"
+                  : "Submit All Predictions"}{" "}
+              ({predictedCount}/{openCount})
             </Button>
           </div>
         )}
       </div>
+
+      {/* Warning before final and/or incomplete predictions go in */}
+      <AlertDialog open={pendingSubmit !== null} onOpenChange={(open) => !open && setPendingSubmit(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
+              {rules.predictionsFinal && missingFixtures.length > 0
+                ? "Submit incomplete, final predictions?"
+                : rules.predictionsFinal
+                  ? "Submit final predictions?"
+                  : "Submit incomplete predictions?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                {missingFixtures.length > 0 && (
+                  <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-yellow-600 dark:text-yellow-400">
+                    <p className="font-semibold">Your predictions are incomplete.</p>
+                    <p>
+                      You've predicted {predictedCount} of {openCount} matches. {plural(missingFixtures.length, "match")}{" "}
+                      {missingFixtures.length === 1 ? "has" : "have"} no prediction and will score no points:
+                    </p>
+                    <ul className="mt-1 list-disc pl-5">
+                      {missingFixtures.map((f) => (
+                        <li key={f.id}>
+                          {f.homeTeam} vs {f.awayTeam}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-1">
+                      {canAddSkippedLater
+                        ? rules.lockWeekAtFirstKickoff
+                          ? "You can still predict them later, but only until the week's first match kicks off."
+                          : "You can still predict them later, until each one kicks off."
+                        : "You won't be able to predict them later: this is your only submission for this week."}
+                    </p>
+                  </div>
+                )}
+                {rules.predictionsFinal && (
+                  <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-destructive">
+                    <p className="font-semibold">These predictions can never be changed.</p>
+                    <p>Once you submit, your picks below are final. Nobody can edit or undo them, including you.</p>
+                  </div>
+                )}
+                {pendingSubmit && (
+                  <ul className="space-y-1">
+                    {pendingSubmit.map((p) => {
+                      const f = openFixtures.find((x) => x.id === p.fixtureId);
+                      return (
+                        <li key={p.fixtureId} className="flex justify-between gap-3">
+                          <span className="truncate">
+                            {f?.homeTeam} vs {f?.awayTeam}
+                          </span>
+                          <span className="shrink-0 font-medium text-foreground">{pickLabel(p)}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go back</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSubmit}>
+              {rules.predictionsFinal ? "I understand, submit" : "Submit anyway"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

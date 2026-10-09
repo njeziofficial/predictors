@@ -1,4 +1,5 @@
 import { clearAuth, getToken, saveAuth, tokenExpiresSoon } from "./auth";
+import type { PredictionRules } from "./predictionRules";
 
 const BASE_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:63487";
@@ -138,6 +139,7 @@ export interface ScraperSettingsDto {
   registrationClosed: boolean;
   reminderEnabled: boolean;
   reminderHoursBeforeFirstGame: number;
+  predictionRules: PredictionRules;
 }
 
 export interface AdminStatusDto {
@@ -180,6 +182,7 @@ export type Permission =
   | "audit.view"
   | "settings.view"
   | "settings.manage"
+  | "predictions.rules"
   | "messages.broadcast";
 
 export interface MyPermissionsDto {
@@ -513,7 +516,7 @@ export const api = {
       const qs = weekId ? `?weekId=${encodeURIComponent(weekId)}` : "";
       return request<PredictionDto[]>(`/api/predictions/me${qs}`);
     },
-    lockStatus: () => request<{ locked: boolean }>("/api/predictions/lock-status"),
+    lockStatus: () => request<{ locked: boolean; rules: PredictionRules }>("/api/predictions/lock-status"),
   },
 
   chat: {
@@ -570,6 +573,12 @@ export const api = {
       request<ScraperSettingsDto>("/api/admin/predictions-lock", {
         method: "PUT",
         body: JSON.stringify({ locked }),
+      }),
+    // Needs "Change prediction rules" (the system admin's unless granted).
+    setPredictionRules: (rules: PredictionRules) =>
+      request<ScraperSettingsDto>("/api/admin/prediction-rules", {
+        method: "PUT",
+        body: JSON.stringify(rules),
       }),
     setRegistrationClosed: (closed: boolean) =>
       request<ScraperSettingsDto>("/api/admin/registration", {
