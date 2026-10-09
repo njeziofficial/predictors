@@ -5,7 +5,32 @@ interface Env {
   BACKEND_URL: string;
 }
 
+interface ExecutionContext {
+  waitUntil(promise: Promise<unknown>): void;
+}
+
+// Render's free tier sleeps after 15 minutes without inbound requests, which also stops the
+// backend's scraper and reminder jobs. The cron in wrangler.jsonc calls this every 10 minutes,
+// so the backend stays awake even when nobody has the app open.
+async function keepBackendAwake(env: Env): Promise<void> {
+  if (!env.BACKEND_URL) return;
+  try {
+    // "/" only redirects to /swagger: no database work. Don't follow the redirect (404 in production).
+    const res = await fetch(new URL("/", env.BACKEND_URL), {
+      redirect: "manual",
+      signal: AbortSignal.timeout(90_000), // a cold start can take up to a minute
+    });
+    console.log(`keep-alive: backend answered ${res.status}`);
+  } catch (err) {
+    console.error("keep-alive: backend ping failed", err);
+  }
+}
+
 export default {
+  async scheduled(_controller: unknown, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(keepBackendAwake(env));
+  },
+
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 

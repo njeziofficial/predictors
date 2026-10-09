@@ -16,5 +16,8 @@
     // "BACKEND_URL": "https://undelusively-unscandalized-melissia.ngrok-free.dev"
     "BACKEND_URL": "https://predictors-backend.onrender.com"
   },
+  // Pings the backend every 10 minutes so Render's free tier (sleeps after 15 idle minutes)
+  // never spins it down. See keepBackendAwake in worker/index.ts.
+  "triggers": { "crons": ["*/10 * * * *"] },
   "observability": { "enabled": true }
 }
