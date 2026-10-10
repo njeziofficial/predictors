@@ -2,9 +2,9 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Calculator } from "lucide-react";
 import { BrandLoader } from "@/components/Brand";
-import { api, type FixtureDto, type MatchWeekDto, type FixtureStatusName } from "@/lib/api";
+import { api, type FixtureDto, type MatchWeekDto, type FixtureStatusName, type PointsCorrectionDto } from "@/lib/api";
 import AdminLayout from "@/components/AdminLayout";
 import { useApp } from "@/context/AppContext";
 import { Button } from "@/components/ui/button";
@@ -331,6 +331,18 @@ const AdminFixtures = () => {
     onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to delete fixture."),
   });
 
+  const [corrections, setCorrections] = useState<PointsCorrectionDto[] | null>(null);
+  const { mutate: recheckPoints, isPending: isRechecking } = useMutation({
+    mutationFn: api.admin.recheckPoints,
+    onSuccess: (result) => {
+      if (result.length === 0) toast.success("All points are correct. Nothing to fix.");
+      else setCorrections(result);
+      queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
+      queryClient.invalidateQueries({ queryKey: ["predictions"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to recheck points."),
+  });
+
   const { mutate: deleteWeek, isPending: isDeletingWeek } = useMutation({
     mutationFn: (id: string) => api.admin.weeks.remove(id),
     onSuccess: () => {
@@ -349,15 +361,69 @@ const AdminFixtures = () => {
             <h1 className="text-2xl font-bold">Fixtures</h1>
             <p className="text-sm text-muted-foreground">Manage match weeks and fixtures</p>
           </div>
-          <WeekFormDialog
-            onSaved={invalidate}
-            trigger={
-              <Button size="sm">
-                <Plus className="h-3.5 w-3.5 mr-1" /> New week
-              </Button>
-            }
-          />
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => recheckPoints()}
+              disabled={isRechecking}
+              title="Recalculate every player's points from the results and fix any that are wrong. Also runs automatically every 15 minutes."
+            >
+              {isRechecking ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Calculator className="h-3.5 w-3.5 mr-1" />}
+              Recheck points
+            </Button>
+            <WeekFormDialog
+              onSaved={invalidate}
+              trigger={
+                <Button size="sm">
+                  <Plus className="h-3.5 w-3.5 mr-1" /> New week
+                </Button>
+              }
+            />
+          </div>
         </div>
+
+        <Dialog open={corrections !== null} onOpenChange={(open) => !open && setCorrections(null)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Fixed {corrections?.length} prediction{corrections?.length === 1 ? "" : "s"}</DialogTitle>
+            </DialogHeader>
+            <p className="text-xs text-muted-foreground">
+              These points didn't match the results and have been corrected. The standings now include the fixes,
+              and each change is recorded in the audit trail.
+            </p>
+            <div className="max-h-80 overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Player</TableHead>
+                    <TableHead>Match</TableHead>
+                    <TableHead className="text-right">Points</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {corrections?.map((c) => (
+                    <TableRow key={c.predictionId}>
+                      <TableCell>{c.userName}</TableCell>
+                      <TableCell>
+                        {c.match}
+                        {c.previousWeekId !== c.weekId && (
+                          <span className="block text-[10px] text-muted-foreground">Moved to the match's week</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        {c.previousPoints === c.points ? c.points : `${c.previousPoints} → ${c.points}`}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setCorrections(null)}>Done</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {isLoading && (
           <BrandLoader className="h-32" />

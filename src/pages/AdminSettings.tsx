@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
-import { Loader2, Radio, Settings as SettingsIcon, BellRing, Lock, LockOpen, ShieldAlert, UserPlus, UserX, Eye, ListChecks } from "lucide-react";
+import { Loader2, Radio, Settings as SettingsIcon, BellRing, Lock, LockOpen, ShieldAlert, UserPlus, UserX, Eye, ListChecks, Power } from "lucide-react";
 import { BrandLoader } from "@/components/Brand";
-import { api } from "@/lib/api";
+import { api, type WakeMode } from "@/lib/api";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { DEFAULT_PREDICTION_RULES, type PredictionRules } from "@/lib/predictionRules";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,30 @@ import { usePermissions } from "@/lib/permissions";
 // BBC Sport) — this only labels the weeks it creates, so it's constrained to the one value
 // that actually matches what gets scraped rather than free text that could drift out of sync.
 const COMPETITIONS = ["La Liga"];
+
+// See worker/wake.ts.
+const WAKE_MODES: { value: WakeMode; label: string; help: string }[] = [
+  {
+    value: "matchwindows",
+    label: "Match windows (recommended)",
+    help: "Keeps the server awake from 30 minutes before each kickoff until the match ends (and when a reminder is due), and lets it sleep otherwise, retrying requests while it wakes. Live scores update during every match, using only a fraction of the free hours.",
+  },
+  {
+    value: "keepalive",
+    label: "Keep alive (ping)",
+    help: "Pings the server every 10 minutes so it never sleeps. No waiting, and live scores keep updating when nobody has the app open, but it uses about 720-744 of the 750 free hours a month.",
+  },
+  {
+    value: "retry",
+    label: "Retry while waking",
+    help: "Lets the server sleep. If a request finds it asleep, the app keeps retrying until it's up instead of showing an error. Saves free hours, but live scores only update while someone is using the app.",
+  },
+  {
+    value: "none",
+    label: "None",
+    help: "No pinging and no retrying. The first requests after a sleep may fail while the server wakes up.",
+  },
+];
 
 const AdminSettings = () => {
   const queryClient = useQueryClient();
@@ -65,6 +90,20 @@ const AdminSettings = () => {
     queryFn: api.admin.auditLogSettings.get,
     enabled: currentUser?.isSystemUser === true,
   });
+
+  const { data: wakeConfig, error: wakeConfigError } = useQuery({
+    queryKey: ["wake-config"],
+    queryFn: api.admin.wakeConfig.get,
+    enabled: currentUser?.isSystemUser === true,
+    retry: false,
+  });
+  const [wakeMode, setWakeMode] = useState<WakeMode>("keepalive");
+  const [retryCount, setRetryCount] = useState(12);
+  useEffect(() => {
+    if (!wakeConfig) return;
+    setWakeMode(wakeConfig.mode);
+    setRetryCount(wakeConfig.retryCount);
+  }, [wakeConfig]);
 
   useEffect(() => {
     if (!settings || seeded) return;
@@ -157,6 +196,17 @@ const AdminSettings = () => {
     },
   });
 
+  const { mutate: saveWakeConfig, isPending: isSavingWakeConfig } = useMutation({
+    mutationFn: () => api.admin.wakeConfig.set(wakeMode, retryCount),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(["wake-config"], saved);
+      toast.success("Server wake-up setting saved. It reaches every server location within about a minute.");
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to save the server wake-up setting.");
+    },
+  });
+
   if (isLoading) {
     return (
       <AdminLayout permission="settings.view">
@@ -184,6 +234,13 @@ const AdminSettings = () => {
   const competitionValid = competition.trim().length > 0;
   const reminderHoursValid = reminderHoursBeforeFirstGame >= 1 && reminderHoursBeforeFirstGame <= 336;
   const canSave = intervalValid && competitionValid && reminderHoursValid && !isSaving;
+
+  const retryDelay = wakeConfig?.retryDelaySeconds ?? 5;
+  const retryCountValid = Number.isInteger(retryCount) && retryCount >= 1 && retryCount <= (wakeConfig?.maxRetryCount ?? 30);
+  const wakeConfigDirty = !!wakeConfig && (wakeMode !== wakeConfig.mode || retryCount !== wakeConfig.retryCount);
+  // Modes that let the server sleep and retry requests while it wakes.
+  const usesRetry = wakeMode === "retry" || wakeMode === "matchwindows";
+  const wakeSchedule = wakeConfig?.schedule;
 
   return (
     <AdminLayout permission="settings.view">
@@ -578,6 +635,125 @@ const AdminSettings = () => {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+          </div>
+        )}
+
+        {currentUser?.isSystemUser && (
+          <div className="rounded-xl border border-destructive/30 bg-card p-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <Power className="h-4 w-4 text-destructive" />
+              <span className="text-sm font-semibold">Server wake-up</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-destructive/20 text-destructive">
+                System user only
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Render's free plan puts the backend to sleep after 15 minutes without visitors, and waking it takes
+              about a minute. Choose how the app deals with that. This takes effect right away; it doesn't require
+              saving settings below.
+            </p>
+
+            {wakeConfigError ? (
+              <div className="rounded-lg bg-destructive/10 border border-destructive/30 px-3 py-2 text-xs text-destructive">
+                Couldn't load this setting: {wakeConfigError instanceof Error ? wakeConfigError.message : "unknown error"}.
+                It's handled by the Cloudflare Worker, so it's only available on the deployed site.
+              </div>
+            ) : (
+              <>
+                <RadioGroup value={wakeMode} onValueChange={(v) => setWakeMode(v as WakeMode)} className="gap-3">
+                  {WAKE_MODES.map((m) => (
+                    <div key={m.value} className="flex items-start gap-3">
+                      <RadioGroupItem value={m.value} id={`wake-${m.value}`} className="mt-0.5" />
+                      <div>
+                        <Label htmlFor={`wake-${m.value}`}>{m.label}</Label>
+                        <p className="text-xs text-muted-foreground">{m.help}</p>
+                      </div>
+                    </div>
+                  ))}
+                </RadioGroup>
+
+                {wakeMode === "matchwindows" && (
+                  <div className="rounded-lg border border-border bg-secondary/50 px-3 py-2 text-xs text-muted-foreground space-y-0.5">
+                    {!wakeSchedule ? (
+                      <p>The match schedule hasn't been fetched yet. It will be when you save.</p>
+                    ) : (
+                      <>
+                        <p>
+                          {wakeSchedule.inWindow
+                            ? "A match window is on now: the server is being kept awake."
+                            : "No match on now: the server is allowed to sleep."}
+                        </p>
+                        {wakeSchedule.nextWindow && (
+                          <p>
+                            {wakeSchedule.inWindow ? "This window" : "Next window"}:{" "}
+                            {format(new Date(wakeSchedule.nextWindow.start), "EEE d MMM, HH:mm")} –{" "}
+                            {format(new Date(wakeSchedule.nextWindow.end), "HH:mm")}
+                          </p>
+                        )}
+                        <p>
+                          Schedule checked {formatDistanceToNow(new Date(wakeSchedule.fetchedAt), { addSuffix: true })}.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="wake-retry-count" className={!usesRetry ? "text-muted-foreground" : ""}>
+                    Retry count
+                  </Label>
+                  <Input
+                    id="wake-retry-count"
+                    type="number"
+                    min={1}
+                    max={wakeConfig?.maxRetryCount ?? 30}
+                    value={retryCount}
+                    onChange={(e) => setRetryCount(Number(e.target.value))}
+                    className="bg-secondary border-border"
+                    disabled={!usesRetry}
+                  />
+                  {retryCountValid ? (
+                    <p className="text-xs text-muted-foreground">
+                      Tries again every {retryDelay}s, so a request waits up to about {retryCount * retryDelay}s for the
+                      server to wake before showing an error.
+                      {retryCount * retryDelay < 60 && " Render usually needs about 60s, so this may be too short."}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-destructive">Must be a whole number from 1 to {wakeConfig?.maxRetryCount ?? 30}.</p>
+                  )}
+                </div>
+
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      className="w-full"
+                      disabled={!wakeConfig || !retryCountValid || !wakeConfigDirty || isSavingWakeConfig}
+                    >
+                      {isSavingWakeConfig && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      Save server wake-up
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Switch to "{WAKE_MODES.find((m) => m.value === wakeMode)?.label}"?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {wakeMode === "matchwindows"
+                          ? `The server will be kept awake from 30 minutes before each kickoff until the match ends, and once a day briefly to find new fixtures. Otherwise it sleeps, and the first visitor waits up to about ${retryCount * retryDelay}s while it wakes.`
+                          : wakeMode === "keepalive"
+                          ? "The server will be pinged every 10 minutes and never sleep. This uses nearly all of Render's 750 free hours each month, so don't run another free service in the same Render workspace."
+                          : wakeMode === "retry"
+                            ? `The server will sleep when nobody is using the app, and live scores won't update until someone opens it. The first visitor after a sleep waits up to about ${retryCount * retryDelay}s while it wakes.`
+                            : "The server will sleep when nobody is using the app, and live scores won't update until someone opens it. The first requests after a sleep may fail with an error while it wakes."}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => saveWakeConfig()}>Apply</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </>
+            )}
           </div>
         )}
 

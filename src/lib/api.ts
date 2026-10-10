@@ -154,6 +154,35 @@ export interface AuditLogSettingsDto {
   enabled: boolean;
 }
 
+// A prediction whose points (or week) the server found wrong and fixed (Services/PointsReconciler.cs).
+export interface PointsCorrectionDto {
+  predictionId: string;
+  userId: string;
+  userName: string;
+  fixtureId: string;
+  match: string;
+  previousPoints: number;
+  points: number;
+  previousWeekId: string;
+  weekId: string;
+}
+
+// How the Cloudflare Worker handles Render putting the backend to sleep (worker/wake.ts).
+export type WakeMode = "keepalive" | "retry" | "none" | "matchwindows";
+
+export interface WakeConfigDto {
+  mode: WakeMode;
+  retryCount: number;
+  maxRetryCount: number;
+  retryDelaySeconds: number;
+  // When the backend has matches to follow, as last fetched by the Worker (null until fetched).
+  schedule: {
+    fetchedAt: string;
+    inWindow: boolean;
+    nextWindow: { start: string; end: string } | null;
+  } | null;
+}
+
 export interface UserSummaryDto {
   id: string;
   name: string;
@@ -603,6 +632,15 @@ export const api = {
           body: JSON.stringify({ overrides }),
         }),
     },
+    // System admin only. Answered by the Cloudflare Worker itself, so only on the deployed site.
+    wakeConfig: {
+      get: () => request<WakeConfigDto>("/api/edge/wake-config"),
+      set: (mode: WakeMode, retryCount: number) =>
+        request<WakeConfigDto>("/api/edge/wake-config", {
+          method: "PUT",
+          body: JSON.stringify({ mode, retryCount }),
+        }),
+    },
     auditLogSettings: {
       get: () => request<AuditLogSettingsDto>("/api/admin/audit-log-settings"),
       set: (enabled: boolean) =>
@@ -687,6 +725,8 @@ export const api = {
           method: "DELETE",
         }),
     },
+    // Recalculates every prediction's points and fixes wrong ones; returns what changed.
+    recheckPoints: () => request<PointsCorrectionDto[]>("/api/admin/points/recheck", { method: "POST" }),
     fixtures: {
       create: (weekId: string, homeTeam: string, awayTeam: string, kickoffIso: string) =>
         request<FixtureDto>(`/api/admin/weeks/${encodeURIComponent(weekId)}/fixtures`, {
