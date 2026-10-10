@@ -159,6 +159,28 @@ const AdminSettings = () => {
     },
   });
 
+  // Flips only the saved on/off state, leaving any unsaved edits to the other settings alone.
+  const { mutate: setScraperEnabled, isPending: isTogglingScraper } = useMutation({
+    mutationFn: (on: boolean) =>
+      api.admin.updateSettings({
+        enabled: on,
+        pollIntervalSeconds: settings!.pollIntervalSeconds,
+        competition: settings!.competition,
+        sourceName: settings!.sourceName,
+        reminderEnabled: settings!.reminderEnabled,
+        reminderHoursBeforeFirstGame: settings!.reminderHoursBeforeFirstGame,
+      }),
+    onSuccess: (_, on) => {
+      setEnabled(on);
+      queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-status"] });
+      toast.success(on ? "Scraper resumed." : "Scraper paused.");
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to update the scraper.");
+    },
+  });
+
   const { mutate: setLock, isPending: isLocking } = useMutation({
     mutationFn: (locked: boolean) => api.admin.setPredictionsLock(locked),
     onSuccess: (_, locked) => {
@@ -264,6 +286,21 @@ const AdminSettings = () => {
               {status?.scraperEnabled ? "Running" : "Paused"}
             </span>
           </div>
+          {canManage && settings && status && (
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-xs text-muted-foreground">
+                {status.scraperEnabled
+                  ? "Pausing stops live score syncing for everyone right away."
+                  : "Paused: scores and match status aren't updating. Resume to start syncing right away."}
+              </p>
+              <Switch
+                aria-label="Scraper running"
+                checked={status.scraperEnabled}
+                onCheckedChange={(on) => setScraperEnabled(on)}
+                disabled={isTogglingScraper}
+              />
+            </div>
+          )}
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Last scraped</span>
             <span>
@@ -336,6 +373,11 @@ const AdminSettings = () => {
                   {r.label}
                 </Label>
                 <p className="text-xs text-muted-foreground">{r.help}</p>
+                {r.disabled && (
+                  <p className="text-xs text-muted-foreground mt-1 italic">
+                    Turn on "Lock the whole week at first kickoff" to use this.
+                  </p>
+                )}
               </div>
               <Switch
                 id={`rule-${r.key}`}
