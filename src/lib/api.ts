@@ -135,6 +135,11 @@ export interface ScraperSettingsDto {
   competition: string;
   sourceName: string;
   availableSources: string[];
+  // Missing from a backend older than source modes.
+  sourceMode?: SourceMode;
+  sourceOrder?: string[];
+  // The sources that can create new fixtures (they report which round a match is in).
+  roundSources?: string[];
   predictionsLocked: boolean;
   registrationClosed: boolean;
   reminderEnabled: boolean;
@@ -319,9 +324,20 @@ export interface UpdateScraperSettingsPayload {
   enabled: boolean;
   pollIntervalSeconds: number;
   competition: string;
+  // Ignored by the current backend (the source is set with setScraperSource); still sent, as the
+  // saved value, because a backend from before source modes requires it.
   sourceName: string;
   reminderEnabled: boolean;
   reminderHoursBeforeFirstGame: number;
+}
+
+// See the backend's Services/Scraping/SourcePlan.cs.
+export type SourceMode = "Single" | "Fallback" | "Rotate";
+
+export interface ScraperSourcePayload {
+  mode: SourceMode;
+  sourceName: string;
+  sourceOrder: string[];
 }
 
 // Chat. No emails or phone numbers here: every player can see these.
@@ -608,6 +624,12 @@ export const api = {
       request<ScraperSettingsDto>("/api/admin/prediction-rules", {
         method: "PUT",
         body: JSON.stringify(rules),
+      }),
+    // System admin only.
+    setScraperSource: (source: ScraperSourcePayload) =>
+      request<ScraperSettingsDto>("/api/admin/scraper-source", {
+        method: "PUT",
+        body: JSON.stringify(source),
       }),
     setRegistrationClosed: (closed: boolean) =>
       request<ScraperSettingsDto>("/api/admin/registration", {

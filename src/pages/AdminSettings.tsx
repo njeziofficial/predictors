@@ -24,11 +24,12 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import AdminLayout from "@/components/AdminLayout";
+import ScraperSourceCard from "@/components/ScraperSourceCard";
 import { useApp } from "@/context/AppContext";
 import { usePermissions } from "@/lib/permissions";
 
-// The scraper's Puppeteer sources are hard-coded to La Liga's pages (Flashscore/Livescore/
-// BBC Sport) — this only labels the weeks it creates, so it's constrained to the one value
+// The scraper's Puppeteer sources are hard-coded to La Liga's pages (Flashscore, FotMob and
+// the rest) — this only labels the weeks it creates, so it's constrained to the one value
 // that actually matches what gets scraped rather than free text that could drift out of sync.
 const COMPETITIONS = ["La Liga"];
 
@@ -66,7 +67,6 @@ const AdminSettings = () => {
   const [enabled, setEnabled] = useState(true);
   const [pollIntervalSeconds, setPollIntervalSeconds] = useState(60);
   const [competition, setCompetition] = useState("");
-  const [sourceName, setSourceName] = useState("Flashscore");
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderHoursBeforeFirstGame, setReminderHoursBeforeFirstGame] = useState(24);
   const [seeded, setSeeded] = useState(false);
@@ -110,7 +110,6 @@ const AdminSettings = () => {
     setEnabled(settings.enabled);
     setPollIntervalSeconds(settings.pollIntervalSeconds);
     setCompetition(settings.competition);
-    setSourceName(settings.sourceName);
     setReminderEnabled(settings.reminderEnabled);
     setReminderHoursBeforeFirstGame(settings.reminderHoursBeforeFirstGame);
     setSeeded(true);
@@ -146,7 +145,7 @@ const AdminSettings = () => {
         enabled,
         pollIntervalSeconds,
         competition,
-        sourceName,
+        sourceName: settings?.sourceName ?? "Flashscore",
         reminderEnabled,
         reminderHoursBeforeFirstGame,
       }),
@@ -378,6 +377,9 @@ const AdminSettings = () => {
           )}
         </fieldset>
 
+        {/* System user only, so it sits outside the settings.manage fieldset below too. */}
+        {settings && <ScraperSourceCard settings={settings} canEdit={currentUser?.isSystemUser === true} />}
+
         {!canManage && (
           <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-2 text-xs text-muted-foreground">
             <Eye className="h-3.5 w-3.5 shrink-0" />
@@ -433,25 +435,6 @@ const AdminSettings = () => {
             {!competitionValid && <p className="text-xs text-destructive">Required.</p>}
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="source">Live score source</Label>
-            <Select value={sourceName} onValueChange={setSourceName}>
-              <SelectTrigger id="source" className="bg-secondary border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(settings?.availableSources ?? [sourceName]).map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Only one source is scraped at a time — no fallback between sites. Flashscore is required to create
-              new match weeks; the others are score/status fallbacks and best used only if Flashscore is blocked.
-            </p>
-          </div>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-4 space-y-4">
