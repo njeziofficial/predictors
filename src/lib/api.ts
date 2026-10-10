@@ -153,6 +153,16 @@ export interface AdminStatusDto {
   remindersConfigured: boolean;
   predictionsLocked: boolean;
   registrationClosed: boolean;
+  // Sources that failed or were refused lately. Missing from an older backend.
+  sourceProblems?: SourceProblemDto[];
+}
+
+// coolingUntil is set while the scraper is leaving the source alone after it refused or kept failing.
+export interface SourceProblemDto {
+  name: string;
+  failures: number;
+  coolingUntil: string | null;
+  lastProblem: string | null;
 }
 
 export interface AuditLogSettingsDto {

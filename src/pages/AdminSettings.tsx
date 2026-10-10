@@ -272,6 +272,23 @@ const AdminSettings = () => {
                 : "Never"}
             </span>
           </div>
+          {status?.sourceProblems?.map((p) => (
+            <div key={p.name} className="flex items-start justify-between gap-4 text-sm">
+              <span className="text-muted-foreground">{p.name}</span>
+              <span className="text-right">
+                <span
+                  className={`text-xs px-2 py-0.5 rounded font-medium ${
+                    p.coolingUntil ? "bg-destructive/15 text-destructive" : "bg-secondary text-muted-foreground"
+                  }`}
+                >
+                  {p.coolingUntil
+                    ? `Resting until ${format(new Date(p.coolingUntil), "HH:mm")}`
+                    : `${p.failures} failed ${p.failures === 1 ? "try" : "tries"}`}
+                </span>
+                {p.lastProblem && <span className="block text-xs text-muted-foreground mt-1">{p.lastProblem}</span>}
+              </span>
+            </div>
+          ))}
         </div>
 
         {/* Its own permission, so it sits outside the settings.manage fieldset below. */}
