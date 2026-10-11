@@ -216,6 +216,7 @@ export interface UserSummaryDto {
 export type Permission =
   | "fixtures.manage"
   | "participation.view"
+  | "marking.view"
   | "users.view"
   | "users.create"
   | "users.edit"
@@ -269,6 +270,49 @@ export interface PlayerParticipationDto {
   predicted: number;
   submittedAt: string | null;
   lastLoginAt: string | null;
+}
+
+// Every player's picks for a week with the result and points of each (backend WeekMarking).
+// A pick is hidden (outcome null) until its match kicks off.
+export interface MarkedPickDto {
+  fixtureId: string;
+  outcome: OutcomeType | null;
+  homeGoals: number | null;
+  awayGoals: number | null;
+  points: number;
+  // What the scoring rule gives now; differs from points only while a correction is pending.
+  expectedPoints: number;
+  reason: string;
+}
+
+export interface PlayerMarkingDto {
+  userId: string;
+  name: string;
+  whatsAppName: string | null;
+  points: number;
+  expectedPoints: number;
+  picksMade: number;
+  picks: MarkedPickDto[];
+}
+
+export interface MarkingFixtureDto {
+  id: string;
+  homeTeam: string;
+  awayTeam: string;
+  kickoff: string;
+  status: FixtureStatus;
+  finalScoreHome: number | null;
+  finalScoreAway: number | null;
+  picksVisible: boolean;
+}
+
+export interface WeekMarkingDto {
+  weekId: string;
+  weekName: string;
+  // When the end-of-week check signed the week off; null until every match is over.
+  reconciledAt: string | null;
+  fixtures: MarkingFixtureDto[];
+  players: PlayerMarkingDto[];
 }
 
 export interface WeekParticipationDto {
@@ -743,6 +787,9 @@ export const api = {
       // Every active player's prediction count for the week.
       participation: (weekId: string) =>
         request<WeekParticipationDto>(`/api/admin/weeks/${encodeURIComponent(weekId)}/participation`),
+      // Every player's picks, results and points for the week.
+      marking: (weekId: string) =>
+        request<WeekMarkingDto>(`/api/admin/weeks/${encodeURIComponent(weekId)}/marking`),
       create: (name: string, competition: string) =>
         request<MatchWeekDto>("/api/admin/weeks", {
           method: "POST",

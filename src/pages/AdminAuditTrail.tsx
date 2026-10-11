@@ -20,6 +20,8 @@ const actionColors: Record<string, string> = {
   RoleChanged: "bg-primary/20 text-primary",
   StatusChanged: "bg-destructive/20 text-destructive",
   UserDeleted: "bg-destructive/20 text-destructive",
+  PointsCorrected: "bg-warning/20 text-warning",
+  WeekReconciled: "bg-success/20 text-success",
 };
 
 const AdminAuditTrail = () => {
