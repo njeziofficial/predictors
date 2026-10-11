@@ -2,13 +2,19 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useApp } from "@/context/AppContext";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, type LeaderboardEntryDto } from "@/lib/api";
 import { format } from "date-fns";
 import { Trophy, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import WeeklyChampions from "@/components/WeeklyChampions";
 
 type Tab = "weekly" | "overall" | "champions";
+
+// Shown in brackets after the name, unless it would only repeat it.
+const showWhatsAppName = (entry: LeaderboardEntryDto) => {
+  const whatsApp = entry.whatsAppName?.trim();
+  return !!whatsApp && whatsApp.toLowerCase() !== entry.name.trim().toLowerCase();
+};
 
 const Leaderboard = () => {
   const { currentUser } = useApp();
@@ -180,6 +186,9 @@ const Leaderboard = () => {
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">
                       {isMe ? "You" : entry.name}
+                      {!isMe && showWhatsAppName(entry) && (
+                        <span className="text-muted-foreground"> ({entry.whatsAppName!.trim()})</span>
+                      )}
                       {isMe && <span className="ml-1 text-xs text-primary">(you)</span>}
                     </p>
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground">

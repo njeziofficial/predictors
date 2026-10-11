@@ -69,6 +69,7 @@ export interface PredictionItem {
 export interface LeaderboardEntryDto {
   userId: string;
   name: string;
+  whatsAppName: string | null;
   totalPoints: number;
   // Points carried over from before the app; already included in totalPoints. Always 0 on weekly boards.
   previousPoints: number;
