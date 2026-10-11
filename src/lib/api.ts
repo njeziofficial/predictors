@@ -272,6 +272,105 @@ export interface PlayerParticipationDto {
   lastLoginAt: string | null;
 }
 
+// The system admin's Scraper Health page (backend AdminScraperHealthController). The in-memory
+// parts (state, polls, sources, logs) describe the server process answering, since it started.
+export interface HealthWarning {
+  severity: "error" | "warning";
+  title: string;
+  detail: string;
+}
+
+export interface HealthPoll {
+  at: string;
+  durationMs: number;
+  plan: string[];
+  source: string | null;
+  matches: number;
+  queued: number;
+  outcome: "Ok" | "NoMatches" | "Resting" | "Failed";
+  problem: string | null;
+}
+
+export interface HealthSource {
+  name: string;
+  inUse: boolean;
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  lastMatches: number;
+  lastDurationMs: number;
+  lastResult: string | null;
+  failures: number;
+  coolingUntil: string | null;
+  lastProblem: string | null;
+}
+
+export interface HealthQueueRow {
+  id: number;
+  fixtureId: string;
+  source: string;
+  scrapedAt: string;
+  processedAt: string | null;
+  outcome: string | null;
+  attempts: number;
+  error: string | null;
+  reading: string;
+}
+
+export interface HealthMatch {
+  id: string;
+  homeTeam: string;
+  awayTeam: string;
+  kickoff: string;
+  status: FixtureStatus;
+  scoreHome: number | null;
+  scoreAway: number | null;
+  minute: number | null;
+  updatedAt: string;
+  problem: string | null;
+}
+
+export interface HealthLogEntry {
+  at: string;
+  level: "Information" | "Warning" | "Error" | "Critical";
+  category: string;
+  message: string;
+  exception: string | null;
+}
+
+export interface ScraperHealthDto {
+  now: string;
+  process: { startedAt: string; environment: string; version: string | null };
+  settings: { enabled: boolean; mode: SourceMode; sources: string[]; pollIntervalSeconds: number; competition: string };
+  state: {
+    phase: "Starting" | "Polling" | "Waiting" | "Paused" | "Restarting";
+    detail: string | null;
+    nextPollAt: string | null;
+    schedule: "InPlay" | "MatchWindow" | "NoMatch" | null;
+    lastPollAt: string | null;
+    lastSuccessAt: string | null;
+  };
+  warnings: HealthWarning[];
+  polls: HealthPoll[];
+  sources: HealthSource[];
+  queue: {
+    pending: number;
+    oldestPendingAt: string | null;
+    appliedLastHour: number;
+    failedLastDay: number;
+    lastAppliedAt: string | null;
+    retentionHours: number;
+    recent: HealthQueueRow[];
+  };
+  points: {
+    lastRunAt: string | null;
+    lastCorrections: number;
+    lastError: string | null;
+    weeks: { id: string; name: string; fixtures: number; finished: number; reconciledAt: string | null }[];
+  };
+  matches: HealthMatch[];
+  logs: HealthLogEntry[];
+}
+
 // Every player's picks for a week with the result and points of each (backend WeekMarking).
 // A pick is hidden (outcome null) until its match kicks off.
 export interface MarkedPickDto {
@@ -804,6 +903,11 @@ export const api = {
         request<{ message: string }>(`/api/admin/weeks/${encodeURIComponent(id)}`, {
           method: "DELETE",
         }),
+    },
+    // System admin only: the scraper's health, and a poll that re-applies every match.
+    system: {
+      scraperHealth: () => request<ScraperHealthDto>("/api/admin/system/scraper-health"),
+      pollNow: () => request<{ message: string }>("/api/admin/system/scraper/poll-now", { method: "POST" }),
     },
     // Recalculates every prediction's points and fixes wrong ones; returns what changed.
     recheckPoints: () => request<PointsCorrectionDto[]>("/api/admin/points/recheck", { method: "POST" }),

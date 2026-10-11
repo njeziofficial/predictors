@@ -5,6 +5,7 @@ import {
   CalendarDays,
   ClipboardCheck,
   ListChecks,
+  Activity,
   Users,
   History,
   Settings,
@@ -34,6 +35,7 @@ const navItems: { path: string; label: string; icon: typeof LayoutDashboard; per
   { path: "/admin/audit", label: "Audit Trail", icon: ScrollText, permission: "audit.view" },
   { path: "/admin/settings", label: "Settings", icon: Settings, permission: "settings.view" },
   { path: "/admin/access", label: "Access Control", icon: KeyRound, systemOnly: true },
+  { path: "/admin/scraper", label: "Scraper Health", icon: Activity, systemOnly: true },
   { path: "/admin/messages", label: "Messages", icon: MessageCircle },
   { path: "/profile", label: "Profile", icon: User },
 ];
