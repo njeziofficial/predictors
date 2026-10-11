@@ -13,7 +13,7 @@
   },
   "vars": {
     // Public origin of the backend API (no trailing slash), e.g. "https://api.example.com".
-    // "BACKEND_URL": "https://undelusively-unscandalized-melissia.ngrok-free.dev"
+    // Production value. For local `wrangler dev`, .dev.vars (gitignored) overrides it with the ngrok tunnel.
     "BACKEND_URL": "https://predictors-backend.onrender.com"
   },
   // Runs every 10 minutes. In "keep alive" mode it pings the backend so Render's free tier
