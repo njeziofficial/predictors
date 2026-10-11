@@ -7,6 +7,7 @@ import type { PredictionDto, MatchWeekDto } from "@/lib/api";
 import { ChevronDown, ChevronUp, Trophy, Star, CheckCircle2, TrendingUp, History } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import NavBar from "@/components/NavBar";
+import { OUTCOME_STYLES, outcomeLabel } from "@/lib/outcomeStyles";
 
 interface WeekSummary {
   weekId: string;
@@ -285,17 +286,12 @@ const Dashboard = () => {
               {isExpanded && (
                 <div className="border-t border-border px-4 pb-4 pt-3 space-y-3 animate-in slide-in-from-top-2 duration-200">
                   <div className="grid grid-cols-4 gap-2">
-                    {([
-                      { key: "home_win", label: "Home Win", color: "border-blue-500 text-blue-400" },
-                      { key: "draw", label: "Draw", color: "border-yellow-500 text-yellow-400" },
-                      { key: "away_win", label: "Away Win", color: "border-purple-500 text-purple-400" },
-                      { key: "correct_score", label: "Score", color: "border-primary text-primary" },
-                    ] as const).map(cat => {
-                      const data = breakdown[cat.key];
+                    {(["home_win", "draw", "away_win", "correct_score"] as const).map(key => {
+                      const data = breakdown[key];
                       return (
-                        <div key={cat.key} className={`rounded-lg border ${cat.color} bg-card p-2 text-center`}>
+                        <div key={key} className={`rounded-lg border ${OUTCOME_STYLES[key].outline} bg-card p-2 text-center`}>
                           <p className="text-sm font-bold">+{data.earned}</p>
-                          <p className="text-[9px] text-muted-foreground">{cat.label}</p>
+                          <p className="text-[9px] text-muted-foreground">{OUTCOME_STYLES[key].label}</p>
                           <p className="text-[9px] text-muted-foreground">{data.count}</p>
                         </div>
                       );
@@ -318,16 +314,8 @@ const Dashboard = () => {
                             <div className="min-w-0">
                               <p className="font-medium truncate">{fixture.homeTeam} vs {fixture.awayTeam}</p>
                               <p className="text-muted-foreground">
-                                <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium mr-1 ${
-                                  pred.outcome === "home_win" ? "bg-blue-500/20 text-blue-400" :
-                                  pred.outcome === "away_win" ? "bg-purple-500/20 text-purple-400" :
-                                  pred.outcome === "draw" ? "bg-yellow-500/20 text-yellow-400" :
-                                  "bg-primary/20 text-primary"
-                                }`}>
-                                  {pred.outcome.replace("_", " ")}
-                                  {pred.outcome === "correct_score" && pred.homeGoals != null
-                                    ? ` ${pred.homeGoals}-${pred.awayGoals}`
-                                    : ""}
+                                <span className={`inline-block px-1.5 py-0.5 rounded border text-[10px] font-medium mr-1 ${OUTCOME_STYLES[pred.outcome].badge}`}>
+                                  {outcomeLabel(pred.outcome, pred.homeGoals, pred.awayGoals)}
                                 </span>
                                 {fixture.finalScore
                                   ? `· FT ${fixture.finalScore.home}-${fixture.finalScore.away}`

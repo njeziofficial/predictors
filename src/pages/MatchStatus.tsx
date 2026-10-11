@@ -4,17 +4,10 @@ import { useApp } from "@/context/AppContext";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { hasMatchesInPlay, useLivePollInterval } from "@/lib/liveData";
-import type { PredictionDto } from "@/lib/api";
 import { Clock } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import { BrandLoader } from "@/components/Brand";
-
-function predLabel(pred: PredictionDto): string {
-  if (pred.outcome === "correct_score") {
-    return `Correct Score (${pred.homeGoals}-${pred.awayGoals})`;
-  }
-  return pred.outcome.split("_").map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
-}
+import { OUTCOME_STYLES, outcomeLabel } from "@/lib/outcomeStyles";
 
 const MatchStatus = () => {
   const { currentUser } = useApp();
@@ -121,9 +114,11 @@ const MatchStatus = () => {
                       )}
                     </div>
                     {pred ? (
-                      <span className="text-xs flex items-center gap-1 text-muted-foreground">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${OUTCOME_STYLES[pred.outcome].badge}`}
+                      >
                         <Clock className="h-3 w-3" />
-                        {predLabel(pred)}
+                        {outcomeLabel(pred.outcome, pred.homeGoals, pred.awayGoals)}
                       </span>
                     ) : (
                       <span className="text-xs text-muted-foreground italic">No prediction</span>

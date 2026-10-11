@@ -25,20 +25,13 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { DEFAULT_PREDICTION_RULES, isFixtureOpen, weekPredictionState } from "@/lib/predictionRules";
+import { OUTCOME_STYLES, outcomeLabel } from "@/lib/outcomeStyles";
 
 type Pick = { outcome: OutcomeType; homeGoals?: number; awayGoals?: number };
 
-const outcomeOptions: { value: OutcomeType; label: string; pts: number; color: string }[] = [
-  { value: "home_win", label: "Home Win", pts: POINTS.home_win, color: "border-blue-500 text-blue-400" },
-  { value: "draw", label: "Draw", pts: POINTS.draw, color: "border-yellow-500 text-yellow-400" },
-  { value: "away_win", label: "Away Win", pts: POINTS.away_win, color: "border-purple-500 text-purple-400" },
-  { value: "correct_score", label: "Score", pts: POINTS.correct_score, color: "border-primary text-primary" },
-];
+const outcomeOptions: OutcomeType[] = ["home_win", "draw", "away_win", "correct_score"];
 
-const pickLabel = (pick: Pick) =>
-  pick.outcome === "correct_score"
-    ? `Score ${pick.homeGoals}-${pick.awayGoals}`
-    : outcomeOptions.find((o) => o.value === pick.outcome)?.label ?? pick.outcome;
+const pickLabel = (pick: Pick) => outcomeLabel(pick.outcome, pick.homeGoals, pick.awayGoals);
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : word.endsWith("ch") ? "es" : "s"}`;
 
@@ -394,26 +387,25 @@ const Predictions = () => {
                 return (
                   <div
                     key={fixture.id}
-                    className={`rounded-xl border border-border bg-card p-4 space-y-3 transition-all duration-300 ${matchLocked ? "opacity-50" : ""}`}
+                    className={`rounded-xl border border-border bg-card p-4 space-y-3 transition-all duration-300 ${
+                      pick ? `border-l-4 ${OUTCOME_STYLES[pick.outcome].accent}` : ""
+                    } ${matchLocked ? "opacity-60" : ""}`}
                     style={{ animationDelay: `${(gi * 3 + mi) * 40}ms` }}
                   >
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="text-xs text-muted-foreground">
                         {format(new Date(fixture.kickoff), "EEE, MMM d")} · {format(new Date(fixture.kickoff), "HH:mm")}
                       </span>
-                      {pick && editable && (
-                        <span className="text-xs text-primary font-medium">+{POINTS[pick.outcome]}pts potential</span>
-                      )}
-                      {pick && !editable && (
-                        <span className="text-xs text-muted-foreground">
-                          {savedFinal && !matchLocked ? (
-                            <Lock className="h-3 w-3 inline mr-1" />
-                          ) : (
-                            <Clock className="h-3 w-3 inline mr-1" />
-                          )}
-                          {pick.outcome.replace("_", " ")}
-                          {pick.outcome === "correct_score" && ` (${pick.homeGoals}-${pick.awayGoals})`}
-                          {savedFinal && !matchLocked && " · final"}
+                      {pick && (
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${OUTCOME_STYLES[pick.outcome].badge}`}
+                        >
+                          {!editable &&
+                            (savedFinal && !matchLocked ? <Lock className="h-3 w-3" /> : <Clock className="h-3 w-3" />)}
+                          {pickLabel(pick)}
+                          <span className="font-normal opacity-80">
+                            {editable ? `· +${POINTS[pick.outcome]}pts` : savedFinal && !matchLocked ? "· final" : ""}
+                          </span>
                         </span>
                       )}
                     </div>
@@ -445,20 +437,27 @@ const Predictions = () => {
                     {editable && (
                       <>
                         <div className="grid grid-cols-4 gap-2">
-                          {outcomeOptions.map((opt) => {
-                            const selected = pick?.outcome === opt.value;
+                          {outcomeOptions.map((outcome) => {
+                            const style = OUTCOME_STYLES[outcome];
+                            const selected = pick?.outcome === outcome;
                             return (
                               <button
-                                key={opt.value}
-                                onClick={() => updatePick(fixture.id, opt.value)}
-                                className={`flex flex-col items-center gap-0.5 py-2.5 rounded-lg border text-xs font-medium transition-all duration-200 ${
+                                key={outcome}
+                                onClick={() => updatePick(fixture.id, outcome)}
+                                aria-pressed={selected}
+                                className={`flex flex-col items-center gap-0.5 py-2.5 rounded-lg border text-xs transition-all duration-200 ${
                                   selected
-                                    ? `${opt.color} border-current bg-current/10`
-                                    : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+                                    ? `${style.solid} font-bold`
+                                    : `border-border font-medium hover:border-foreground/30 ${
+                                        pick ? "text-muted-foreground/60" : "text-muted-foreground"
+                                      }`
                                 }`}
                               >
-                                <span>{opt.label}</span>
-                                <span className="text-[10px] opacity-70">+{opt.pts}pts</span>
+                                <span className="flex items-center gap-1">
+                                  {!selected && <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />}
+                                  {style.label}
+                                </span>
+                                <span className="text-[10px] opacity-80">+{POINTS[outcome]}pts</span>
                               </button>
                             );
                           })}
