@@ -14,6 +14,7 @@ import { BrandLoader } from "@/components/Brand";
 import NavBar from "@/components/NavBar";
 import { LatestChampions } from "@/components/WeeklyChampions";
 import MyStanding from "@/components/MyStanding";
+import FixtureScore from "@/components/FixtureScore";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -413,7 +414,6 @@ const Predictions = () => {
                 const matchLocked = !isFixtureOpen(fixture, now);
                 const editable = weekState.editableIds.has(fixture.id);
                 const savedFinal = rules.predictionsFinal && savedIds.has(fixture.id);
-                const score = fixture.liveScore ?? fixture.finalScore;
 
                 return (
                   <div
@@ -447,17 +447,7 @@ const Predictions = () => {
                         <span className="font-semibold text-sm">{fixture.homeTeam}</span>
                         <p className="text-[10px] text-muted-foreground">{fixture.homeTeam.substring(0, 3).toUpperCase()}</p>
                       </div>
-                      {score ? (
-                        <span
-                          className={`font-bold text-sm px-3 py-1 rounded ${
-                            fixture.status === "live" ? "bg-success/20 text-success" : "bg-secondary"
-                          }`}
-                        >
-                          {score.home} – {score.away}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground px-3 py-1 rounded bg-secondary">vs</span>
-                      )}
+                      <FixtureScore fixture={fixture} now={now} />
                       <div className="flex-1">
                         <span className="font-semibold text-sm">{fixture.awayTeam}</span>
                         <p className="text-[10px] text-muted-foreground">{fixture.awayTeam.substring(0, 3).toUpperCase()}</p>

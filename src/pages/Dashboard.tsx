@@ -8,6 +8,7 @@ import { ChevronDown, ChevronUp, Trophy, Star, CheckCircle2, TrendingUp, History
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import NavBar from "@/components/NavBar";
 import { OUTCOME_STYLES, outcomeLabel } from "@/lib/outcomeStyles";
+import { fixtureStatusText } from "@/lib/fixtureStatus";
 
 interface WeekSummary {
   weekId: string;
@@ -303,6 +304,7 @@ const Dashboard = () => {
                       const fixture = hist.week?.fixtures.find(f => f.id === pred.fixtureId);
                       if (!fixture) return null;
                       const won = pred.pointsEarned > 0;
+                      const statusText = fixtureStatusText(fixture, new Date());
                       return (
                         <div key={pred.fixtureId} className="flex items-center justify-between rounded-lg px-3 py-2 text-xs">
                           <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -317,9 +319,7 @@ const Dashboard = () => {
                                 <span className={`inline-block px-1.5 py-0.5 rounded border text-[10px] font-medium mr-1 ${OUTCOME_STYLES[pred.outcome].badge}`}>
                                   {outcomeLabel(pred.outcome, pred.homeGoals, pred.awayGoals)}
                                 </span>
-                                {fixture.finalScore
-                                  ? `· FT ${fixture.finalScore.home}-${fixture.finalScore.away}`
-                                  : ""}
+                                {statusText && `· ${statusText}`}
                               </p>
                             </div>
                           </div>
