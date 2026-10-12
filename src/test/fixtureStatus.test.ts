@@ -28,6 +28,21 @@ describe("fixtureDisplay", () => {
     expect(d).toEqual({ state: "cancelled", score: null, label: "Cancelled" });
   });
 
+  it("keeps the score a match was stopped at, with the minute", () => {
+    const d = fixtureDisplay(fixture({ status: "postponed", liveScore: { home: 2, away: 2 }, liveMinute: 67 }), NOW);
+    expect(d).toEqual({ state: "postponed", score: { home: 2, away: 2 }, label: "Postponed at 67'" });
+  });
+
+  it("keeps a 0–0 when a minute shows the match was under way", () => {
+    const d = fixtureDisplay(fixture({ status: "cancelled", liveScore: { home: 0, away: 0 }, liveMinute: 30 }), NOW);
+    expect(d).toEqual({ state: "cancelled", score: { home: 0, away: 0 }, label: "Cancelled at 30'" });
+  });
+
+  it("keeps a score with goals even when no minute was recorded", () => {
+    const d = fixtureDisplay(fixture({ status: "postponed", liveScore: { home: 1, away: 0 } }), NOW);
+    expect(d).toEqual({ state: "postponed", score: { home: 1, away: 0 }, label: "Postponed mid-match" });
+  });
+
   it("shows the live score and minute", () => {
     const d = fixtureDisplay(fixture({ status: "live", liveScore: { home: 1, away: 0 }, liveMinute: 67 }), NOW);
     expect(d).toEqual({ state: "live", score: { home: 1, away: 0 }, label: "Live 67'" });

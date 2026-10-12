@@ -17,15 +17,32 @@ export interface FixtureDisplay {
 }
 
 /**
+ * The score a called-off match reached before it was stopped, or null if it never got going.
+ * The backend keeps the last live reading when a match is postponed or cancelled. A recorded
+ * minute or a goal proves play happened; a bare 0–0 with no minute is a leftover placeholder.
+ */
+function scoreWhenStopped(f: FixtureDto): ScoreDto | null {
+  const score = f.liveScore ?? f.finalScore;
+  if (!score) return null;
+  return f.liveMinute != null || score.home + score.away > 0 ? score : null;
+}
+
+function calledOff(f: FixtureDto, state: "postponed" | "cancelled"): FixtureDisplay {
+  const word = state === "postponed" ? "Postponed" : "Cancelled";
+  const score = scoreWhenStopped(f);
+  if (!score) return { state, score: null, label: word };
+  return { state, score, label: f.liveMinute != null ? `${word} at ${f.liveMinute}'` : `${word} mid-match` };
+}
+
+/**
  * What a player should see for a match. A score is only shown when the status backs it up: a
  * called-off match can keep a stale scraped 0–0, and an unstarted match has no score at all.
  */
 export function fixtureDisplay(f: FixtureDto, now: Date): FixtureDisplay {
   switch (f.status) {
     case "postponed":
-      return { state: "postponed", score: null, label: "Postponed" };
     case "cancelled":
-      return { state: "cancelled", score: null, label: "Cancelled" };
+      return calledOff(f, f.status);
     case "live":
       return {
         state: "live",
