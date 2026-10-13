@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DEFAULT_PREDICTION_RULES, isFixtureOpen, weekPredictionState } from "@/lib/predictionRules";
 import { OUTCOME_STYLES, outcomeLabel } from "@/lib/outcomeStyles";
+import { canGoToExtraTime, weekLabel } from "@/lib/weeks";
+import { useCompetition } from "@/context/CompetitionContext";
 
 type Pick = { outcome: OutcomeType; homeGoals?: number; awayGoals?: number };
 
@@ -114,11 +116,16 @@ const Predictions = () => {
     enabled: !!currentUser,
   });
 
+  const { competitionId, selectWeeks } = useCompetition();
   const { data: weeks, isLoading: weeksLoading, error: weeksError } = useQuery({
     queryKey: ["weeks"],
     queryFn: api.weeks.list,
+    select: selectWeeks,
     enabled: !!currentUser,
   });
+
+  // Another competition: pick its week afresh (the effect below), not keep the last one's id.
+  useEffect(() => setSelectedWeekId(""), [competitionId]);
 
   const { data: existingPreds } = useQuery({
     queryKey: ["predictions", selectedWeekId],
@@ -306,7 +313,7 @@ const Predictions = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">
-              {selectedWeek.name.replace(`${selectedWeek.competition} — `, "")} · {selectedWeek.competition}
+              {weekLabel(selectedWeek)} · {selectedWeek.competition}
             </h1>
             <p className="text-sm text-muted-foreground">
               {predictedCount}/{openCount} predicted · +{potentialPts} pts potential
@@ -334,6 +341,11 @@ const Predictions = () => {
           {rules.lockWeekAtFirstKickoff && rules.allowLatePredictions && (
             <span className="px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">Late predictions allowed</span>
           )}
+          {canGoToExtraTime(selectedWeek) && (
+            <span className="px-2 py-0.5 rounded-full bg-primary/15 text-primary">
+              Results count after 90 minutes — extra time and penalties don't
+            </span>
+          )}
         </div>
 
         {/* Week selector */}
@@ -353,7 +365,7 @@ const Predictions = () => {
                     : "bg-secondary text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {w.name.replace(`${w.competition} — `, "")}
+                {weekLabel(w)}
                 {wLocked && " 🔒"}
               </button>
             );

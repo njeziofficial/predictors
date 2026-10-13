@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { activeWeek } from "@/lib/weeks";
+import { activeWeek, canGoToExtraTime, weekLabel } from "@/lib/weeks";
 import type { FixtureStatus, MatchWeekDto } from "@/lib/api";
 
 const week = (id: string, fixtures: [string, FixtureStatus][]): MatchWeekDto => ({
   id,
   name: id,
   competition: "La Liga",
+  competitionId: "la-liga",
   fixtures: fixtures.map(([kickoff, status], i) => ({
     id: `${id}-${i}`,
     weekId: id,
@@ -45,5 +46,21 @@ describe("activeWeek", () => {
       week("w6", [["2026-09-20T15:00:00Z", "ended"]]),
     ];
     expect(activeWeek(weeks, NOW)?.id).toBe("w7");
+  });
+});
+
+describe("competition weeks", () => {
+  it("labels a week without its competition", () => {
+    expect(weekLabel({ name: "La Liga — Week 8", competition: "La Liga" })).toBe("Week 8");
+    expect(weekLabel({ name: "Champions League — Round of 16 — 1st leg", competition: "Champions League" }))
+      .toBe("Round of 16 — 1st leg");
+  });
+
+  it("knows which knockout weeks are marked after 90 minutes", () => {
+    expect(canGoToExtraTime({ id: "champions-league-r16-leg2" })).toBe(true);
+    expect(canGoToExtraTime({ id: "champions-league-final" })).toBe(true);
+    expect(canGoToExtraTime({ id: "champions-league-r16-leg1" })).toBe(false);
+    expect(canGoToExtraTime({ id: "champions-league-md-3" })).toBe(false);
+    expect(canGoToExtraTime({ id: "la-liga-week-8" })).toBe(false);
   });
 });

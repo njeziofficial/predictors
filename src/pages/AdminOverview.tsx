@@ -6,7 +6,9 @@ import { api } from "@/lib/api";
 import { activeWeek } from "@/lib/weeks";
 import { usePermissions } from "@/lib/permissions";
 import AdminLayout from "@/components/AdminLayout";
+import CompetitionSwitcher from "@/components/CompetitionSwitcher";
 import { useApp } from "@/context/AppContext";
+import { useCompetition } from "@/context/CompetitionContext";
 
 const AdminOverview = () => {
   const { currentUser } = useApp();
@@ -19,9 +21,11 @@ const AdminOverview = () => {
     enabled: currentUser?.role === "admin" && can("users.view"),
   });
 
+  const { selectWeeks } = useCompetition("admin");
   const { data: weeks, isLoading: weeksLoading } = useQuery({
     queryKey: ["weeks"],
     queryFn: api.weeks.list,
+    select: selectWeeks,
     enabled: currentUser?.role === "admin",
   });
 
@@ -52,6 +56,7 @@ const AdminOverview = () => {
         <div>
           <h1 className="text-2xl font-bold">Overview</h1>
           <p className="text-sm text-muted-foreground">Snapshot of the prediction game</p>
+          <CompetitionSwitcher scope="admin" className="mt-3" />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">

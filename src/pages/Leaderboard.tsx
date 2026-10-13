@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { Trophy, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import WeeklyChampions from "@/components/WeeklyChampions";
+import { useCompetition } from "@/context/CompetitionContext";
 
 type Tab = "weekly" | "overall" | "champions";
 
@@ -27,10 +28,14 @@ const Leaderboard = () => {
   const setTab = (t: Tab) => setSearchParams(t === "overall" ? {} : { tab: t }, { replace: true });
   // null = the latest started week.
   const [pickedWeekIdx, setWeekIdx] = useState<number | null>(null);
+  const { competitionId, competitionName, hasChoice, selectWeeks } = useCompetition();
+  // Another competition's weeks: start again from its latest.
+  useEffect(() => setWeekIdx(null), [competitionId]);
 
   const { data: weeks = [] } = useQuery({
     queryKey: ["weeks"],
     queryFn: api.weeks.list,
+    select: selectWeeks,
     enabled: !!currentUser,
   });
 
@@ -43,8 +48,8 @@ const Leaderboard = () => {
   const currentWeekData = activeWeeks[weekIdx];
 
   const { data: overallData = [] } = useQuery({
-    queryKey: ["leaderboard"],
-    queryFn: api.leaderboard.overall,
+    queryKey: ["leaderboard", "overall", competitionId],
+    queryFn: () => api.leaderboard.overall(competitionId),
     enabled: !!currentUser,
   });
 
@@ -76,7 +81,7 @@ const Leaderboard = () => {
 
       <div className="mx-auto max-w-2xl px-4 pt-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Standings</h1>
+          <h1 className="text-2xl font-bold">{hasChoice ? `${competitionName} standings` : "Standings"}</h1>
           <p className="text-sm text-muted-foreground">Level on points: most correct scores, then earliest submission</p>
         </div>
 

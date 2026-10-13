@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useQueries } from "@tanstack/react-query";
 import { Crown, Medal, ChevronRight, Target } from "lucide-react";
 import { api, type LeaderboardEntryDto, type MatchWeekDto } from "@/lib/api";
+import { weekLabel } from "@/lib/weeks";
 
 // Gold, silver, bronze — indexed by finishing place - 1.
 const MEDALS = [
@@ -43,7 +44,8 @@ const isFinal = (w: MatchWeekDto) =>
 const firstKickoff = (w: MatchWeekDto) =>
   Math.min(...w.fixtures.map(f => new Date(f.kickoff).getTime()));
 
-const shortWeekName = (w: MatchWeekDto) => w.name.replace(/.*—\s*/, "");
+// "Week 8", "Round of 16 — 1st leg": everything after the competition's name.
+const shortWeekName = weekLabel;
 
 const initials = (name: string) =>
   name

@@ -9,6 +9,8 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "rec
 import NavBar from "@/components/NavBar";
 import { OUTCOME_STYLES, outcomeLabel } from "@/lib/outcomeStyles";
 import { fixtureStatusText } from "@/lib/fixtureStatus";
+import { firstKickoff, weekLabel } from "@/lib/weeks";
+import { LA_LIGA, useCompetition } from "@/context/CompetitionContext";
 
 interface WeekSummary {
   weekId: string;
@@ -29,25 +31,30 @@ const Dashboard = () => {
     enabled: !!currentUser,
   });
 
+  // The chosen competition's weeks only, so predictions in other competitions drop out below.
+  const { competitionId, competitionName, hasChoice, selectWeeks } = useCompetition();
   const { data: weeks = [], error: weeksError } = useQuery({
     queryKey: ["weeks"],
     queryFn: api.weeks.list,
+    select: selectWeeks,
     enabled: !!currentUser,
   });
 
   const { data: overallLeaderboard = [] } = useQuery({
-    queryKey: ["leaderboard"],
-    queryFn: api.leaderboard.overall,
+    queryKey: ["leaderboard", "overall", competitionId],
+    queryFn: () => api.leaderboard.overall(competitionId),
     enabled: !!currentUser,
   });
 
-  const { data: previousPoints = [] } = useQuery({
+  // Points from before the app were all La Liga's.
+  const { data: previousPointsData = [] } = useQuery({
     queryKey: ["previous-points-mine"],
     queryFn: api.users.previousPoints,
     enabled: !!currentUser,
     // Changes only on an admin import, which the server announces (see lib/liveData).
     staleTime: 5 * 60_000,
   });
+  const previousPoints = competitionId === LA_LIGA ? previousPointsData : [];
 
   const weekSummaries = useMemo<WeekSummary[]>(() => {
     const map = new Map<string, PredictionDto[]>();
@@ -62,7 +69,8 @@ const Dashboard = () => {
         return { weekId, weekName: week?.name ?? weekId, totalPoints, predictions: preds, week };
       })
       .filter(s => s.week?.fixtures.some(f => f.status === "ended"))
-      .sort((a, b) => a.weekId.localeCompare(b.weekId));
+      // In the order they were played (week ids don't sort: "week-10" before "week-9").
+      .sort((a, b) => firstKickoff(a.week!) - firstKickoff(b.week!));
   }, [allPredictions, weeks]);
 
   const weeklyLeaderboardQueries = useQueries({
@@ -119,7 +127,7 @@ const Dashboard = () => {
   }, null);
 
   const chartData = weekSummaries.map(h => ({
-    name: h.weekName.replace(/.*—\s*/, ""),
+    name: h.week ? weekLabel(h.week) : h.weekName,
     points: h.totalPoints,
   }));
 
@@ -131,7 +139,7 @@ const Dashboard = () => {
 
       <div className="mx-auto max-w-2xl px-4 pt-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">My History</h1>
+          <h1 className="text-2xl font-bold">{hasChoice ? `My ${competitionName} history` : "My History"}</h1>
           <p className="text-sm text-muted-foreground">Season stats and weekly prediction breakdown</p>
         </div>
 

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ClipboardList, Trophy, Radio, Clock, User, LogOut, LayoutDashboard, MessageCircle } from "lucide-react";
 import { BrandLogo } from "@/components/Brand";
+import CompetitionSwitcher from "@/components/CompetitionSwitcher";
 import { useApp } from "@/context/AppContext";
 import { useChat } from "@/context/ChatContext";
 import { setArea } from "@/lib/permissions";
@@ -91,6 +92,8 @@ const NavBar = () => {
           </button>
         </div>
       </div>
+      {/* Only there when players have more than one competition to choose from. */}
+      <CompetitionSwitcher className="mx-4 mb-3" />
     </header>
   );
 };

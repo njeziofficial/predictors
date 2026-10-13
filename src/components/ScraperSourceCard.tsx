@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, ArrowDown, ArrowUp, Eye, Globe, Loader2 } from "lucide-react";
-import { api, type ScraperSettingsDto, type SourceMode } from "@/lib/api";
+import { api, type CompetitionScrapingDto, type ScraperSettingsDto, type SourceMode } from "@/lib/api";
 import {
   SOURCE_MODES,
   describeSource,
@@ -35,22 +35,37 @@ interface Props {
   settings: ScraperSettingsDto;
   /** Only the system user may change the source; everyone else with settings access sees it. */
   canEdit: boolean;
+  /**
+   * Another competition's sources instead of La Liga's: offered only the sites with a page set for
+   * it, and saved to it alone. Left out, the card is La Liga's (ScraperSettings), as it always was.
+   */
+  competition?: CompetitionScrapingDto;
+  title?: string;
 }
+
+const competitionSource = (c: CompetitionScrapingDto): ScraperSource => ({
+  mode: c.sourceMode,
+  sourceName: c.sourceName,
+  sourceOrder: c.sourceOrder,
+});
 
 // Which site(s) live scores come from. Saved on its own (not by "Save settings"), and only by
 // the system user: a bad choice can stop new weeks appearing or feed every player wrong scores.
-const ScraperSourceCard = ({ settings, canEdit }: Props) => {
+const ScraperSourceCard = ({ settings, canEdit, competition, title = "Live score source" }: Props) => {
   const queryClient = useQueryClient();
-  const saved = savedSource(settings);
-  const available = settings.availableSources;
+  const saved = competition ? competitionSource(competition) : savedSource(settings);
+  const available = competition?.availableSources ?? settings.availableSources;
+  // Which sites add weeks is the same whatever the competition (FotMob, Flashscore, ...).
   const roundSources = settings.roundSources ?? [];
+  // Keeps two cards' radio buttons and checkboxes apart.
+  const idPrefix = competition ? `${competition.id}-` : "";
 
   // Follows the saved choice (including another session's change) until edited here.
   const [draft, setDraft] = useState<ScraperSource>(saved);
   const [dirty, setDirty] = useState(false);
   useEffect(() => {
-    if (!dirty) setDraft(savedSource(settings));
-  }, [settings, dirty]);
+    if (!dirty) setDraft(competition ? competitionSource(competition) : savedSource(settings));
+  }, [settings, competition, dirty]);
 
   const edit = (change: Partial<ScraperSource>) => {
     setDraft((prev) => ({ ...prev, ...change }));
@@ -58,9 +73,17 @@ const ScraperSourceCard = ({ settings, canEdit }: Props) => {
   };
 
   const { mutate: save, isPending } = useMutation({
-    mutationFn: () => api.admin.setScraperSource(draft),
-    onSuccess: (next) => {
-      queryClient.setQueryData(["admin-settings"], next);
+    mutationFn: async () => {
+      if (competition) {
+        const next = await api.admin.competitions.setScraperSource(competition.id, draft);
+        queryClient.setQueryData<CompetitionScrapingDto[]>(["admin-competitions-scraping"], (list) =>
+          list?.map((c) => (c.id === next.id ? next : c)),
+        );
+      } else {
+        queryClient.setQueryData(["admin-settings"], await api.admin.setScraperSource(draft));
+      }
+    },
+    onSuccess: () => {
       setDirty(false);
       toast.success("Live score source saved. It's used from the next poll.");
     },
@@ -84,7 +107,7 @@ const ScraperSourceCard = ({ settings, canEdit }: Props) => {
     <div className="rounded-xl border border-border bg-card p-4 space-y-4">
       <div className="flex items-center gap-2">
         <Globe className="h-4 w-4 text-primary" />
-        <span className="text-sm font-semibold">Live score source</span>
+        <span className="text-sm font-semibold">{title}</span>
         <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-destructive/20 text-destructive">
           System user only
         </span>
@@ -110,9 +133,9 @@ const ScraperSourceCard = ({ settings, canEdit }: Props) => {
           >
             {SOURCE_MODES.map((m) => (
               <div key={m.value} className="flex items-start gap-3">
-                <RadioGroupItem value={m.value} id={`source-mode-${m.value}`} className="mt-0.5" />
+                <RadioGroupItem value={m.value} id={`${idPrefix}source-mode-${m.value}`} className="mt-0.5" />
                 <div>
-                  <Label htmlFor={`source-mode-${m.value}`}>{m.label}</Label>
+                  <Label htmlFor={`${idPrefix}source-mode-${m.value}`}>{m.label}</Label>
                   <p className="text-xs text-muted-foreground">{m.help}</p>
                 </div>
               </div>
@@ -121,9 +144,9 @@ const ScraperSourceCard = ({ settings, canEdit }: Props) => {
 
           {draft.mode === "Single" ? (
             <div className="space-y-1.5">
-              <Label htmlFor="source">Source</Label>
+              <Label htmlFor={`${idPrefix}source`}>Source</Label>
               <Select value={draft.sourceName} onValueChange={(v) => edit({ sourceName: v })}>
-                <SelectTrigger id="source" className="bg-secondary border-border">
+                <SelectTrigger id={`${idPrefix}source`} className="bg-secondary border-border">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -152,12 +175,12 @@ const ScraperSourceCard = ({ settings, canEdit }: Props) => {
                   return (
                     <li key={name} className="flex items-center gap-3 px-3 py-2">
                       <Checkbox
-                        id={`source-${name}`}
+                        id={`${idPrefix}source-${name}`}
                         checked={included}
                         onCheckedChange={() => edit({ sourceOrder: toggleSource(draft.sourceOrder, name) })}
                       />
                       <Label
-                        htmlFor={`source-${name}`}
+                        htmlFor={`${idPrefix}source-${name}`}
                         className={`flex flex-1 items-center gap-2 ${included ? "" : "text-muted-foreground"}`}
                       >
                         {included && <span className="w-4 text-xs text-muted-foreground">{position + 1}.</span>}

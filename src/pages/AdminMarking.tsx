@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ChevronDown, CircleAlert, CircleCheck, Clock, EyeOff, Search, ShieldCheck } from "lucide-react";
 import { BrandLoader } from "@/components/Brand";
 import AdminLayout from "@/components/AdminLayout";
+import CompetitionSwitcher from "@/components/CompetitionSwitcher";
+import { useCompetition } from "@/context/CompetitionContext";
 import { api, type MarkedPickDto, type MarkingFixtureDto, type PlayerMarkingDto } from "@/lib/api";
 import { activeWeek, sortWeeks } from "@/lib/weeks";
 import { OUTCOME_STYLES, outcomeLabel } from "@/lib/outcomeStyles";
@@ -84,11 +86,15 @@ const AdminMarking = () => {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
 
+  const { competitionId, selectWeeks } = useCompetition("admin");
   const { data: weeks = [], isLoading: weeksLoading } = useQuery({
     queryKey: ["weeks"],
     queryFn: api.weeks.list,
+    select: selectWeeks,
     enabled: isAdmin,
   });
+  // Another competition: back to its current week.
+  useEffect(() => setPickedWeekId(null), [competitionId]);
   const sortedWeeks = useMemo(() => sortWeeks(weeks).reverse(), [weeks]);
   const weekId = pickedWeekId ?? activeWeek(weeks)?.id ?? null;
 
@@ -124,6 +130,7 @@ const AdminMarking = () => {
             <p className="text-sm text-muted-foreground">
               Every player's picks with the result and the points each earned. Picks show once their match kicks off.
             </p>
+            <CompetitionSwitcher scope="admin" className="mt-3" />
           </div>
           <Select value={weekId ?? undefined} onValueChange={setPickedWeekId} disabled={weeksLoading}>
             <SelectTrigger className="w-full sm:w-[240px]">

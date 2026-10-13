@@ -8,6 +8,8 @@ import { Clock } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import { BrandLoader } from "@/components/Brand";
 import { OUTCOME_STYLES, outcomeLabel } from "@/lib/outcomeStyles";
+import { canGoToExtraTime } from "@/lib/weeks";
+import { useCompetition } from "@/context/CompetitionContext";
 
 const MatchStatus = () => {
   const { currentUser } = useApp();
@@ -16,14 +18,16 @@ const MatchStatus = () => {
   // Scores arrive as server pushes; polling is only the fallback (see useLivePollInterval).
   const pollEvery = useLivePollInterval();
 
-  const { data: weeks = [] } = useQuery({
+  const { selectWeeks } = useCompetition();
+  const { data: weeks = [], isLoading } = useQuery({
     queryKey: ["weeks"],
     queryFn: api.weeks.list,
+    select: selectWeeks,
     refetchInterval: (query) => pollEvery(hasMatchesInPlay(query.state.data)),
     enabled: !!currentUser,
   });
 
-  const { data: preds = [] } = useQuery({
+  const { data: allPreds = [] } = useQuery({
     queryKey: ["predictions", "all"],
     queryFn: () => api.predictions.mine(),
     enabled: !!currentUser,
@@ -36,7 +40,8 @@ const MatchStatus = () => {
 
   if (!currentUser) return null;
 
-  if (!weeks.length) {
+  // While loading only: a competition just switched on may have no weeks yet.
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
         <NavBar />
@@ -46,6 +51,10 @@ const MatchStatus = () => {
   }
 
   const allFixtures = weeks.flatMap(w => w.fixtures);
+  // This competition's predictions only.
+  const fixtureIds = new Set(allFixtures.map(f => f.id));
+  const preds = allPreds.filter(p => fixtureIds.has(p.fixtureId));
+  const extraTimeCounts = new Set(weeks.filter(canGoToExtraTime).map(w => w.id));
   const liveFixtures = allFixtures
     .filter(f => f.status === "live")
     .sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime());
@@ -111,6 +120,9 @@ const MatchStatus = () => {
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-success text-success-foreground animate-pulse">● LIVE</span>
                       {fixture.liveMinute != null && (
                         <span className="text-xs text-muted-foreground">{fixture.liveMinute}'</span>
+                      )}
+                      {extraTimeCounts.has(fixture.weekId) && (fixture.liveMinute ?? 0) > 90 && (
+                        <span className="text-[10px] text-muted-foreground">Extra time · predictions use the 90-minute score</span>
                       )}
                     </div>
                     {pred ? (

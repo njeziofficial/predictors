@@ -13,7 +13,8 @@ export const LIVE_AREA_QUERIES: Record<LiveArea, QueryKey[]> = {
   fixtures: [["weeks"], ["predictions"], ["admin-participation"], ["admin-status"]],
   // Standings, and the points they're made of.
   leaderboard: [["leaderboard"], ["predictions"], ["previous-points-mine"]],
-  settings: [["predictions-lock-status"], ["registration-status"], ["admin-settings"], ["admin-status"]],
+  // Switching a competition on or off is announced as a settings change.
+  settings: [["predictions-lock-status"], ["registration-status"], ["admin-settings"], ["admin-status"], ["competitions"]],
 };
 
 export const ALL_LIVE_AREAS = Object.keys(LIVE_AREA_QUERIES) as LiveArea[];

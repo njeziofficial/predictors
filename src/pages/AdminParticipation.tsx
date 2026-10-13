@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
@@ -19,6 +19,8 @@ import { api, type PlayerParticipationDto } from "@/lib/api";
 import { whatsAppLink } from "@/lib/phone";
 import { activeWeek, sortWeeks } from "@/lib/weeks";
 import AdminLayout from "@/components/AdminLayout";
+import CompetitionSwitcher from "@/components/CompetitionSwitcher";
+import { useCompetition } from "@/context/CompetitionContext";
 import { useApp } from "@/context/AppContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,7 +38,8 @@ const STATUS = {
 // Predictions lock 30 seconds before the first remaining kickoff (same rule as the Predict page).
 const LOCK_LEAD_MS = 30_000;
 
-const shortWeek = (name: string) => name.replace(/.*—\s*/, "");
+// "Week 8", "Round of 16 — 1st leg": the name without its competition ("La Liga — ").
+const shortWeek = (name: string) => name.replace(/^.*?—\s*/, "");
 const displayName = (p: PlayerParticipationDto) => p.whatsAppName || p.name;
 
 const AdminParticipation = () => {
@@ -47,11 +50,15 @@ const AdminParticipation = () => {
   const [search, setSearch] = useState("");
   const [copied, setCopied] = useState(false);
 
+  const { competitionId, selectWeeks } = useCompetition("admin");
   const { data: weeks = [], isLoading: weeksLoading } = useQuery({
     queryKey: ["weeks"],
     queryFn: api.weeks.list,
+    select: selectWeeks,
     enabled: isAdmin,
   });
+  // Another competition: back to its current week.
+  useEffect(() => setPickedWeekId(null), [competitionId]);
   const sortedWeeks = useMemo(() => sortWeeks(weeks).reverse(), [weeks]);
   const weekId = pickedWeekId ?? activeWeek(weeks)?.id ?? null;
 
@@ -130,6 +137,7 @@ const AdminParticipation = () => {
             <p className="text-sm text-muted-foreground">
               See who hasn't predicted a week yet and remind them before it locks.
             </p>
+            <CompetitionSwitcher scope="admin" className="mt-3" />
           </div>
           <Select value={weekId ?? undefined} onValueChange={setPickedWeekId} disabled={weeksLoading}>
             <SelectTrigger className="w-full sm:w-[240px]">

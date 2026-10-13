@@ -42,6 +42,13 @@ export default function FixtureScore({ fixture, now }: { fixture: FixtureDto; no
           {label}
         </span>
       )}
+      {/* A knockout match that went to extra time: the box shows the 90-minute score, which
+          predictions are marked on; this is how it actually ended. */}
+      {state === "full_time" && fixture.afterExtraTime && (
+        <span className="text-[10px] text-muted-foreground" title="Predictions count the score after 90 minutes">
+          {fixture.afterExtraTime.home} – {fixture.afterExtraTime.away} after extra time
+        </span>
+      )}
     </div>
   );
 }

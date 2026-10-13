@@ -6,7 +6,9 @@ import { Loader2, Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Calculator } 
 import { BrandLoader } from "@/components/Brand";
 import { api, type FixtureDto, type MatchWeekDto, type FixtureStatusName, type PointsCorrectionDto } from "@/lib/api";
 import AdminLayout from "@/components/AdminLayout";
+import CompetitionSwitcher from "@/components/CompetitionSwitcher";
 import { useApp } from "@/context/AppContext";
+import { useCompetition } from "@/context/CompetitionContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,11 +61,17 @@ const WeekFormDialog = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(week?.name ?? "");
-  const [competition, setCompetition] = useState(week?.competition ?? "");
+  // A new week goes in the competition being viewed.
+  const { options, competitionId: viewing } = useCompetition("admin");
+  const [competitionId, setCompetitionId] = useState(week?.competitionId ?? viewing);
+  const competitionName = (id: string) => options.find((c) => c.id === id)?.name ?? week?.competition ?? "La Liga";
+  const competition = competitionName(competitionId);
 
   const { mutate: save, isPending } = useMutation({
     mutationFn: () =>
-      week ? api.admin.weeks.update(week.id, name, competition) : api.admin.weeks.create(name, competition),
+      week
+        ? api.admin.weeks.update(week.id, name, competition, competitionId)
+        : api.admin.weeks.create(name, competition, competitionId),
     onSuccess: () => {
       toast.success(week ? "Week updated." : "Week created.");
       setOpen(false);
@@ -81,7 +89,7 @@ const WeekFormDialog = ({
         setOpen(next);
         if (next) {
           setName(week?.name ?? "");
-          setCompetition(week?.competition ?? "");
+          setCompetitionId(week?.competitionId ?? viewing);
         }
       }}
     >
@@ -97,7 +105,19 @@ const WeekFormDialog = ({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="week-competition">Competition</Label>
-            <Input id="week-competition" value={competition} onChange={(e) => setCompetition(e.target.value)} />
+            {/* Decides whose tables the week's points count towards. */}
+            <Select value={competitionId} onValueChange={setCompetitionId}>
+              <SelectTrigger id="week-competition">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(options.length > 0 ? options : [{ id: competitionId, name: competition }]).map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <DialogFooter>
@@ -296,9 +316,11 @@ const AdminFixtures = () => {
   const [pendingDeleteFixture, setPendingDeleteFixture] = useState<string | null>(null);
   const [pendingDeleteWeek, setPendingDeleteWeek] = useState<string | null>(null);
 
+  const { competitionId, selectWeeks } = useCompetition("admin");
   const { data: weeks, isLoading, error } = useQuery({
     queryKey: ["weeks"],
     queryFn: api.weeks.list,
+    select: selectWeeks,
     enabled: currentUser?.role === "admin",
   });
 
@@ -309,7 +331,7 @@ const AdminFixtures = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [pageSize]);
+  }, [pageSize, competitionId]);
 
   const totalCount = weeks?.length ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -360,6 +382,7 @@ const AdminFixtures = () => {
           <div>
             <h1 className="text-2xl font-bold">Fixtures</h1>
             <p className="text-sm text-muted-foreground">Manage match weeks and fixtures</p>
+            <CompetitionSwitcher scope="admin" className="mt-3" />
           </div>
           <div className="flex items-center gap-2">
             <Button

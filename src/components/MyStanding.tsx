@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Trophy } from "lucide-react";
 import { api } from "@/lib/api";
+import { useCompetition } from "@/context/CompetitionContext";
 
 const ordinal = (n: number) => {
   const s = ["th", "st", "nd", "rd"];
@@ -12,9 +13,10 @@ const ordinal = (n: number) => {
 /** The signed-in player's season position and points (previous points included), linking to the full table. */
 const MyStanding = ({ userId }: { userId: string }) => {
   const navigate = useNavigate();
+  const { competitionId, competitionName, hasChoice } = useCompetition();
   const { data: board = [] } = useQuery({
-    queryKey: ["leaderboard"],
-    queryFn: api.leaderboard.overall,
+    queryKey: ["leaderboard", "overall", competitionId],
+    queryFn: () => api.leaderboard.overall(competitionId),
   });
 
   const me = board.find(e => e.userId === userId);
@@ -46,7 +48,9 @@ const MyStanding = ({ userId }: { userId: string }) => {
         </span>
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Your season standing</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+          {hasChoice ? `Your ${competitionName} standing` : "Your season standing"}
+        </p>
         <p className="text-sm font-semibold">
           {ordinal(me.position)} of {board.length}
           <span className="mx-1.5 text-muted-foreground">·</span>

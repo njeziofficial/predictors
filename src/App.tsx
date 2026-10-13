@@ -27,6 +27,7 @@ import AdminAccessControl from "./pages/AdminAccessControl";
 import Messages from "./pages/Messages";
 import AdminMessages from "./pages/AdminMessages";
 import { ChatProvider } from "@/context/ChatContext";
+import { CompetitionProvider } from "@/context/CompetitionContext";
 
 // Data is treated as fresh for 30s, so moving between pages reuses what was just loaded instead
 // of refetching it on every mount. Shared game data (fixtures, standings, settings) stays current
@@ -63,6 +64,7 @@ const App = () => (
         <BrowserRouter>
           {/* Inside the router: a message toast's "Open" navigates to the chat. */}
           <ChatProvider>
+            <CompetitionProvider>
             <Routes>
               <Route path="/" element={<Login />} />
               <Route path="/register" element={<Register />} />
@@ -87,6 +89,7 @@ const App = () => (
               <Route path="/admin/messages/:conversationId?" element={<RequireFreshPassword><AdminMessages /></RequireFreshPassword>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </CompetitionProvider>
           </ChatProvider>
         </BrowserRouter>
       </AppProvider>

@@ -39,13 +39,37 @@ export interface FixtureDto {
   finalScore: ScoreDto | null;
   liveScore: ScoreDto | null;
   liveMinute: number | null;
+  // Knockout matches that went to extra time: the score after it. finalScore stays the score
+  // after 90 minutes, which is what predictions are marked on.
+  afterExtraTime?: ScoreDto | null;
 }
 
 export interface MatchWeekDto {
   id: string;
   name: string;
   competition: string;
+  // Which competition's tables the week counts towards ("la-liga", "champions-league").
+  competitionId: string;
   fixtures: FixtureDto[];
+}
+
+export interface CompetitionDto {
+  id: string;
+  name: string;
+  // Off: hidden from players and closed to predictions. Only admins are sent ones that are off.
+  enabled: boolean;
+  sortOrder: number;
+}
+
+// Where a competition other than La Liga is scraped from (system admin only).
+export interface CompetitionScrapingDto {
+  id: string;
+  name: string;
+  enabled: boolean;
+  sourceMode: SourceMode;
+  sourceName: string;
+  sourceOrder: string[];
+  availableSources: string[];
 }
 
 export interface PredictionDto {
@@ -229,6 +253,7 @@ export type Permission =
   | "settings.view"
   | "settings.manage"
   | "predictions.rules"
+  | "competitions.manage"
   | "messages.broadcast";
 
 export interface MyPermissionsDto {
@@ -289,6 +314,8 @@ export interface HealthPoll {
   queued: number;
   outcome: "Ok" | "NoMatches" | "Resting" | "Failed";
   problem: string | null;
+  // Which competition the poll was for ("La Liga" from servers before competitions).
+  competition?: string;
 }
 
 export interface HealthSource {
@@ -688,6 +715,13 @@ export const api = {
     previousPoints: () => request<PreviousPointsDto[]>("/api/users/me/previous-points"),
   },
 
+  // The ones the caller can see: switched on, or every one for an admin.
+  competitions: {
+    list: () => request<CompetitionDto[]>("/api/competitions"),
+  },
+
+  // Every week of every competition the caller can see; pages keep the chosen competition's
+  // (see CompetitionContext).
   weeks: {
     list: () => request<MatchWeekDto[]>("/api/weeks"),
     current: () => request<MatchWeekDto>("/api/weeks/current"),
@@ -756,7 +790,9 @@ export const api = {
   },
 
   leaderboard: {
-    overall: () => request<LeaderboardEntryDto[]>("/api/leaderboard"),
+    // Each competition has its own season table.
+    overall: (competitionId: string) =>
+      request<LeaderboardEntryDto[]>(`/api/leaderboard?competition=${encodeURIComponent(competitionId)}`),
     byWeek: (weekId: string) =>
       request<LeaderboardEntryDto[]>(`/api/leaderboard/${encodeURIComponent(weekId)}`),
   },
@@ -790,6 +826,21 @@ export const api = {
         method: "PUT",
         body: JSON.stringify({ closed }),
       }),
+    competitions: {
+      // Needs "Switch competitions on or off" (the system admin's unless granted).
+      setEnabled: (id: string, enabled: boolean) =>
+        request<CompetitionDto>(`/api/admin/competitions/${encodeURIComponent(id)}`, {
+          method: "PUT",
+          body: JSON.stringify({ enabled }),
+        }),
+      // System admin only: where each competition other than La Liga is scraped from.
+      scraping: () => request<CompetitionScrapingDto[]>("/api/admin/competitions/scraping"),
+      setScraperSource: (id: string, source: ScraperSourcePayload) =>
+        request<CompetitionScrapingDto>(`/api/admin/competitions/${encodeURIComponent(id)}/scraper-source`, {
+          method: "PUT",
+          body: JSON.stringify(source),
+        }),
+    },
     status: () => request<AdminStatusDto>("/api/admin/status"),
     permissions: {
       // Any admin: what they themselves may do.
@@ -889,15 +940,16 @@ export const api = {
       // Every player's picks, results and points for the week.
       marking: (weekId: string) =>
         request<WeekMarkingDto>(`/api/admin/weeks/${encodeURIComponent(weekId)}/marking`),
-      create: (name: string, competition: string) =>
+      // competition: the name shown; competitionId: whose tables the week counts towards.
+      create: (name: string, competition: string, competitionId: string) =>
         request<MatchWeekDto>("/api/admin/weeks", {
           method: "POST",
-          body: JSON.stringify({ name, competition }),
+          body: JSON.stringify({ name, competition, competitionId }),
         }),
-      update: (id: string, name: string, competition: string) =>
+      update: (id: string, name: string, competition: string, competitionId: string) =>
         request<MatchWeekDto>(`/api/admin/weeks/${encodeURIComponent(id)}`, {
           method: "PUT",
-          body: JSON.stringify({ name, competition }),
+          body: JSON.stringify({ name, competition, competitionId }),
         }),
       remove: (id: string) =>
         request<{ message: string }>(`/api/admin/weeks/${encodeURIComponent(id)}`, {

@@ -18,7 +18,7 @@ import AdminLayout from "@/components/AdminLayout";
 import { BrandLoader } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api, type HealthLogEntry, type ScraperHealthDto } from "@/lib/api";
+import { api, type HealthLogEntry, type HealthPoll, type ScraperHealthDto } from "@/lib/api";
 import { usePermissions } from "@/lib/permissions";
 
 type LogFilter = "all" | "warnings" | "errors";
@@ -137,7 +137,11 @@ const AdminScraperHealth = () => {
     );
   }, [data?.logs, logFilter, logSearch]);
 
-  const lastOk = data?.polls.find((p) => p.outcome === "Ok");
+  // La Liga's: another competition's successful poll mustn't hide La Liga's failing ones.
+  const competitionOf = (p: HealthPoll) => p.competition ?? "La Liga";
+  const lastOk = data?.polls.find((p) => p.outcome === "Ok" && competitionOf(p) === "La Liga");
+  // Only worth a label once more than one competition is being polled.
+  const severalCompetitions = new Set(data?.polls.map(competitionOf)).size > 1;
 
   return (
     <AdminLayout systemOnly>
@@ -272,7 +276,10 @@ const AdminScraperHealth = () => {
                 {data.polls.slice(0, 20).map((p, i) => (
                   <tr key={i}>
                     <td className="whitespace-nowrap px-3 py-2 tabular-nums">{at(p.at)}</td>
-                    <td className="px-3 py-2">{p.source ?? <span className="text-muted-foreground">{p.plan.join(", ")}</span>}</td>
+                    <td className="px-3 py-2">
+                      {p.source ?? <span className="text-muted-foreground">{p.plan.join(", ")}</span>}
+                      {severalCompetitions && <span className="block text-xs text-muted-foreground">{competitionOf(p)}</span>}
+                    </td>
                     <td className="px-3 py-2 tabular-nums">{p.matches}</td>
                     <td className="px-3 py-2 tabular-nums">{p.queued}</td>
                     <td className="px-3 py-2 tabular-nums text-muted-foreground">{secs(p.durationMs)}</td>

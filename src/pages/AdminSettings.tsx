@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import AdminLayout from "@/components/AdminLayout";
 import ScraperSourceCard from "@/components/ScraperSourceCard";
+import CompetitionsCard from "@/components/CompetitionsCard";
 import { useApp } from "@/context/AppContext";
 import { usePermissions } from "@/lib/permissions";
 
@@ -83,6 +84,12 @@ const AdminSettings = () => {
     queryFn: api.admin.status,
     refetchInterval: 10_000,
     enabled: currentUser?.role === "admin",
+  });
+
+  const { data: competitionScraping = [] } = useQuery({
+    queryKey: ["admin-competitions-scraping"],
+    queryFn: api.admin.competitions.scraping,
+    enabled: currentUser?.isSystemUser === true,
   });
 
   const { data: auditLogSettings } = useQuery({
@@ -436,8 +443,28 @@ const AdminSettings = () => {
           )}
         </fieldset>
 
+        {/* Its own permission ("competitions.manage"), so outside the settings.manage fieldset too. */}
+        <CompetitionsCard />
+
         {/* System user only, so it sits outside the settings.manage fieldset below too. */}
-        {settings && <ScraperSourceCard settings={settings} canEdit={currentUser?.isSystemUser === true} />}
+        {settings && (
+          <ScraperSourceCard
+            settings={settings}
+            canEdit={currentUser?.isSystemUser === true}
+            title={competitionScraping.length > 0 ? "La Liga live score source" : undefined}
+          />
+        )}
+        {/* The other competitions' sources: the system admin's alone, so only they load them. */}
+        {settings &&
+          competitionScraping.map((c) => (
+            <ScraperSourceCard
+              key={c.id}
+              settings={settings}
+              canEdit
+              competition={c}
+              title={`${c.name} live score source${c.enabled ? "" : " (off)"}`}
+            />
+          ))}
 
         {!canManage && (
           <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-2 text-xs text-muted-foreground">

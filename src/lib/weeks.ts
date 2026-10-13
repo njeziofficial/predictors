@@ -4,7 +4,16 @@ const time = (iso: string) => new Date(iso).getTime();
 
 export const firstKickoff = (w: MatchWeekDto) => Math.min(...w.fixtures.map((f) => time(f.kickoff)));
 
-export const nextKickoff = (w: MatchWeekDto): number | null => {
+/**
+ * Knockout weeks whose matches can go to extra time (a 2nd leg, the final). Their results are
+ * the score after 90 minutes; mirrors CompetitionRounds.CanGoToExtraTime on the backend.
+ */
+export const canGoToExtraTime = (w: Pick<MatchWeekDto, "id">) => /-(leg2|final)$/.test(w.id);
+
+/** The week's name without its competition: "Week 8", "Round of 16 — 1st leg". */
+export const weekLabel = (w: Pick<MatchWeekDto, "name" | "competition">) => w.name.replace(`${w.competition} — `, "");
+
+export const nextKickoff =(w: MatchWeekDto): number | null => {
   const upcoming = w.fixtures.filter((f) => f.status === "pre_match").map((f) => time(f.kickoff));
   return upcoming.length > 0 ? Math.min(...upcoming) : null;
 };
