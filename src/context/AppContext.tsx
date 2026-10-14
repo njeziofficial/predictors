@@ -9,6 +9,7 @@ import {
   type StoredUser,
 } from "@/lib/auth";
 import { api } from "@/lib/api";
+import { forgetPushOnThisDevice, syncPushSubscription } from "@/lib/push";
 
 interface AppState {
   currentUser: StoredUser | null;
@@ -34,6 +35,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     queryClient.clear();
   }, [currentUser?.id, queryClient]);
 
+  // This browser's push subscription follows whoever is signed in (see lib/push.ts).
+  useEffect(() => {
+    if (currentUser?.id) void syncPushSubscription();
+  }, [currentUser?.id]);
+
   // Keep currentUser in step with storage when it changes outside React: a silent token
   // refresh in this tab, or a login/logout/refresh in another tab.
   useEffect(() => {
@@ -54,6 +60,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const logout = () => {
     // Fire-and-forget: the local sign-out shouldn't wait on (or fail because of) the network.
     api.auth.logout().catch(() => {});
+    void forgetPushOnThisDevice();
     clearAuth();
     setCurrentUser(null);
   };

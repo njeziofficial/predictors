@@ -13,6 +13,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import NavBar from "@/components/NavBar";
 import AdminLayout from "@/components/AdminLayout";
+import { NotificationsCard } from "@/components/PushNotifications";
 import { getArea } from "@/lib/permissions";
 
 const ProfileBody = ({ profile }: { profile: UserProfileDto }) => {
@@ -119,6 +120,8 @@ const ProfileBody = ({ profile }: { profile: UserProfileDto }) => {
           Save changes
         </Button>
       </div>
+
+      <NotificationsCard />
 
       {profile.role === "admin" ? (
         <div className="rounded-xl border border-border bg-card p-4 space-y-2">

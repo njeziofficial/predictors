@@ -16,6 +16,7 @@ import {
   Trophy,
   ShieldOff,
   MessageCircle,
+  BellRing,
 } from "lucide-react";
 import { BrandLoader, BrandLogo, BrandMark } from "@/components/Brand";
 import { useApp } from "@/context/AppContext";
@@ -37,6 +38,7 @@ const navItems: { path: string; label: string; icon: typeof LayoutDashboard; per
   { path: "/admin/access", label: "Access Control", icon: KeyRound, systemOnly: true },
   { path: "/admin/scraper", label: "Scraper Health", icon: Activity, systemOnly: true },
   { path: "/admin/messages", label: "Messages", icon: MessageCircle },
+  { path: "/admin/notifications", label: "Notifications", icon: BellRing, permission: "notifications.send" },
   { path: "/profile", label: "Profile", icon: User },
 ];
 

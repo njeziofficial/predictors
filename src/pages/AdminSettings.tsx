@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
-import { Loader2, Radio, Settings as SettingsIcon, BellRing, Lock, LockOpen, ShieldAlert, UserPlus, UserX, Eye, ListChecks, Power } from "lucide-react";
+import { Loader2, Radio, Settings as SettingsIcon, Lock, LockOpen, ShieldAlert, UserPlus, UserX, Eye, ListChecks, Power } from "lucide-react";
 import { BrandLoader } from "@/components/Brand";
 import { api, type WakeMode } from "@/lib/api";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -26,6 +26,7 @@ import {
 import AdminLayout from "@/components/AdminLayout";
 import ScraperSourceCard from "@/components/ScraperSourceCard";
 import CompetitionsCard from "@/components/CompetitionsCard";
+import ReminderSettingsCard from "@/components/ReminderSettingsCard";
 import { useApp } from "@/context/AppContext";
 import { usePermissions } from "@/lib/permissions";
 
@@ -68,8 +69,6 @@ const AdminSettings = () => {
   const [enabled, setEnabled] = useState(true);
   const [pollIntervalSeconds, setPollIntervalSeconds] = useState(60);
   const [competition, setCompetition] = useState("");
-  const [reminderEnabled, setReminderEnabled] = useState(false);
-  const [reminderHoursBeforeFirstGame, setReminderHoursBeforeFirstGame] = useState(24);
   const [seeded, setSeeded] = useState(false);
   const [rules, setRules] = useState<PredictionRules>(DEFAULT_PREDICTION_RULES);
 
@@ -117,8 +116,6 @@ const AdminSettings = () => {
     setEnabled(settings.enabled);
     setPollIntervalSeconds(settings.pollIntervalSeconds);
     setCompetition(settings.competition);
-    setReminderEnabled(settings.reminderEnabled);
-    setReminderHoursBeforeFirstGame(settings.reminderHoursBeforeFirstGame);
     setSeeded(true);
   }, [settings, seeded]);
 
@@ -153,8 +150,6 @@ const AdminSettings = () => {
         pollIntervalSeconds,
         competition,
         sourceName: settings?.sourceName ?? "Flashscore",
-        reminderEnabled,
-        reminderHoursBeforeFirstGame,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
@@ -174,8 +169,6 @@ const AdminSettings = () => {
         pollIntervalSeconds: settings!.pollIntervalSeconds,
         competition: settings!.competition,
         sourceName: settings!.sourceName,
-        reminderEnabled: settings!.reminderEnabled,
-        reminderHoursBeforeFirstGame: settings!.reminderHoursBeforeFirstGame,
       }),
     onSuccess: (_, on) => {
       setEnabled(on);
@@ -260,8 +253,7 @@ const AdminSettings = () => {
 
   const intervalValid = pollIntervalSeconds >= 15 && pollIntervalSeconds <= 3600;
   const competitionValid = competition.trim().length > 0;
-  const reminderHoursValid = reminderHoursBeforeFirstGame >= 1 && reminderHoursBeforeFirstGame <= 336;
-  const canSave = intervalValid && competitionValid && reminderHoursValid && !isSaving;
+  const canSave = intervalValid && competitionValid && !isSaving;
 
   const retryDelay = wakeConfig?.retryDelaySeconds ?? 5;
   const retryCountValid = Number.isInteger(retryCount) && retryCount >= 1 && retryCount <= (wakeConfig?.maxRetryCount ?? 30);
@@ -465,6 +457,11 @@ const AdminSettings = () => {
               title={`${c.name} live score source${c.enabled ? "" : " (off)"}`}
             />
           ))}
+
+        {/* The system admin's alone, so outside the settings.manage fieldset below too. */}
+        {settings && (
+          <ReminderSettingsCard settings={settings} status={status} canEdit={currentUser?.isSystemUser === true} />
+        )}
 
         {!canManage && (
           <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-2 text-xs text-muted-foreground">
@@ -826,43 +823,6 @@ const AdminSettings = () => {
           </div>
         )}
 
-        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-          <div className="flex items-center gap-2">
-            <BellRing className="h-4 w-4 text-primary" />
-            <span className="text-sm font-semibold">Prediction reminders</span>
-          </div>
-
-          {reminderEnabled && status && !status.remindersConfigured && (
-            <div className="rounded-lg bg-destructive/10 border border-destructive/30 px-3 py-2 text-xs text-destructive">
-              Twilio isn't configured yet (missing AccountSid/AuthToken in the backend's
-              appsettings.json) — reminders are on but nothing will actually send until that's set.
-            </div>
-          )}
-
-          <div className="flex items-center justify-between">
-            <div>
-              <Label htmlFor="reminder-enabled">Enabled</Label>
-              <p className="text-xs text-muted-foreground">Send all non-admin users a reminder to predict</p>
-            </div>
-            <Switch id="reminder-enabled" checked={reminderEnabled} onCheckedChange={setReminderEnabled} />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="reminder-hours">Hours before the week's first match</Label>
-            <Input
-              id="reminder-hours"
-              type="number"
-              min={1}
-              max={336}
-              value={reminderHoursBeforeFirstGame}
-              onChange={(e) => setReminderHoursBeforeFirstGame(Number(e.target.value))}
-              className="bg-secondary border-border"
-              disabled={!reminderEnabled}
-            />
-            {!reminderHoursValid && <p className="text-xs text-destructive">Must be between 1 and 336 hours.</p>}
-          </div>
-        </div>
-
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button className="w-full" disabled={!canSave}>
@@ -881,10 +841,7 @@ const AdminSettings = () => {
                     : "Live score syncing stays on for all users."
                 ) : (
                   "This pauses live score syncing for all users — scores and match status will stop updating until it's re-enabled."
-                )}{" "}
-                {reminderEnabled
-                  ? `Reminders will go out ${reminderHoursBeforeFirstGame}h before each week's first match.`
-                  : "Prediction reminders stay off."}
+                )}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

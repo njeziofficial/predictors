@@ -14,6 +14,7 @@ import { BrandLoader } from "@/components/Brand";
 import NavBar from "@/components/NavBar";
 import { LatestChampions } from "@/components/WeeklyChampions";
 import MyStanding from "@/components/MyStanding";
+import { NotificationsPrompt } from "@/components/PushNotifications";
 import FixtureScore from "@/components/FixtureScore";
 import {
   AlertDialog,
@@ -306,6 +307,7 @@ const Predictions = () => {
       <NavBar />
 
       <div className="mx-auto max-w-2xl px-4 pt-6 space-y-6">
+        <NotificationsPrompt />
         <MyStanding userId={currentUser.id} />
         <LatestChampions weeks={weeks} currentUserId={currentUser.id} />
 

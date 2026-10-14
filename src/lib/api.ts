@@ -168,18 +168,23 @@ export interface ScraperSettingsDto {
   predictionsLocked: boolean;
   registrationClosed: boolean;
   reminderEnabled: boolean;
-  reminderHoursBeforeFirstGame: number;
+  // Hours before each week's first match a reminder goes out (72 = 3 days), earliest reminder
+  // first. Missing from an older backend (which had a single reminderHoursBeforeFirstGame).
+  reminderOffsetsHours?: number[];
   predictionRules: PredictionRules;
 }
 
 export interface AdminStatusDto {
   lastScrapedAt: string | null;
   scraperEnabled: boolean;
+  // Whether Twilio is set up, so reminders also go out by WhatsApp/SMS.
   remindersConfigured: boolean;
   predictionsLocked: boolean;
   registrationClosed: boolean;
   // Sources that failed or were refused lately. Missing from an older backend.
   sourceProblems?: SourceProblemDto[];
+  // Active players with push notifications on, whom reminders reach. Missing from an older backend.
+  playersWithNotifications?: number;
 }
 
 // coolingUntil is set while the scraper is leaving the source alone after it refused or kept failing.
@@ -254,7 +259,61 @@ export type Permission =
   | "settings.manage"
   | "predictions.rules"
   | "competitions.manage"
-  | "messages.broadcast";
+  | "messages.broadcast"
+  | "notifications.send";
+
+export interface NotificationPreferencesDto {
+  reminders: boolean;
+  announcements: boolean;
+}
+
+export type NotificationAudience = "everyone" | "yet-to-predict" | "selected";
+
+// Who an admin notification goes to. important: also to players who turned admin notifications
+// off (system admin only).
+export interface NotificationTarget {
+  audience: NotificationAudience;
+  weekId?: string;
+  userIds?: string[];
+  important: boolean;
+}
+
+export interface SendNotificationPayload extends NotificationTarget {
+  title: string;
+  body: string;
+  // A page in the app, e.g. "/predict".
+  url: string;
+}
+
+// inAudience: players in it; willReceive: of those, with notifications on and not muted.
+export interface NotificationAudienceDto {
+  inAudience: number;
+  willReceive: number;
+}
+
+export interface NotificationPlayerDto {
+  id: string;
+  name: string;
+  whatsAppName: string | null;
+  isAdmin: boolean;
+  hasNotifications: boolean;
+  mutedAnnouncements: boolean;
+}
+
+export interface PushBroadcastDto {
+  id: string;
+  title: string;
+  body: string;
+  url: string;
+  audience: NotificationAudience;
+  weekId: string | null;
+  weekName: string | null;
+  important: boolean;
+  targeted: number;
+  reached: number;
+  sentByName: string;
+  createdAt: string;
+}
 
 export interface MyPermissionsDto {
   isSystemUser: boolean;
@@ -508,8 +567,6 @@ export interface UpdateScraperSettingsPayload {
   // Ignored by the current backend (the source is set with setScraperSource); still sent, as the
   // saved value, because a backend from before source modes requires it.
   sourceName: string;
-  reminderEnabled: boolean;
-  reminderHoursBeforeFirstGame: number;
 }
 
 // See the backend's Services/Scraping/SourcePlan.cs.
@@ -700,6 +757,21 @@ export const api = {
     logout: () => request<void>("/api/auth/logout", { method: "POST" }),
   },
 
+  // Push notifications for this browser (see lib/push.ts).
+  push: {
+    publicKey: () => request<{ publicKey: string }>("/api/push/public-key"),
+    subscribe: (subscription: PushSubscriptionJSON) =>
+      request<void>("/api/push/subscriptions", { method: "POST", body: JSON.stringify(subscription) }),
+    unsubscribe: (endpoint: string) =>
+      request<void>("/api/push/subscriptions/remove", { method: "POST", body: JSON.stringify({ endpoint }) }),
+    // Sends a notification to the caller's own browsers; reached is how many took it.
+    test: () => request<{ reached: number }>("/api/push/test", { method: "POST" }),
+    // Which notifications the caller wants, on all their devices.
+    preferences: () => request<NotificationPreferencesDto>("/api/push/preferences"),
+    setPreferences: (prefs: NotificationPreferencesDto) =>
+      request<NotificationPreferencesDto>("/api/push/preferences", { method: "PUT", body: JSON.stringify(prefs) }),
+  },
+
   users: {
     me: () => request<UserProfileDto>("/api/users/me"),
     updateProfile: (name: string, phoneNumber: string, whatsAppName: string) =>
@@ -804,6 +876,28 @@ export const api = {
         method: "PUT",
         body: JSON.stringify(settings),
       }),
+    // System admin only: whether prediction reminders go out, and how many hours before each
+    // week's first match (72 = 3 days).
+    setReminders: (enabled: boolean, hoursBeforeFirstGame: number[]) =>
+      request<ScraperSettingsDto>("/api/admin/reminders", {
+        method: "PUT",
+        body: JSON.stringify({ enabled, hoursBeforeFirstGame }),
+      }),
+    // Push notifications written by an admin ("Send push notifications").
+    notifications: {
+      players: () => request<NotificationPlayerDto[]>("/api/admin/notifications/players"),
+      audience: (target: NotificationTarget) =>
+        request<NotificationAudienceDto>("/api/admin/notifications/audience", {
+          method: "POST",
+          body: JSON.stringify(target),
+        }),
+      send: (notification: SendNotificationPayload) =>
+        request<{ targeted: number; reached: number }>("/api/admin/notifications", {
+          method: "POST",
+          body: JSON.stringify(notification),
+        }),
+      history: () => request<PushBroadcastDto[]>("/api/admin/notifications/history"),
+    },
     setPredictionsLock: (locked: boolean) =>
       request<ScraperSettingsDto>("/api/admin/predictions-lock", {
         method: "PUT",

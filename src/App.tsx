@@ -26,6 +26,7 @@ import ChooseDestination from "./pages/ChooseDestination";
 import AdminAccessControl from "./pages/AdminAccessControl";
 import Messages from "./pages/Messages";
 import AdminMessages from "./pages/AdminMessages";
+import AdminNotifications from "./pages/AdminNotifications";
 import { ChatProvider } from "@/context/ChatContext";
 import { CompetitionProvider } from "@/context/CompetitionContext";
 
@@ -83,6 +84,7 @@ const App = () => (
               <Route path="/admin/access" element={<RequireFreshPassword><AdminAccessControl /></RequireFreshPassword>} />
               <Route path="/admin/participation" element={<RequireFreshPassword><AdminParticipation /></RequireFreshPassword>} />
               <Route path="/admin/marking" element={<RequireFreshPassword><AdminMarking /></RequireFreshPassword>} />
+              <Route path="/admin/notifications" element={<RequireFreshPassword><AdminNotifications /></RequireFreshPassword>} />
               <Route path="/admin/scraper" element={<RequireFreshPassword><AdminScraperHealth /></RequireFreshPassword>} />
               <Route path="/profile" element={<RequireFreshPassword><Profile /></RequireFreshPassword>} />
               <Route path="/messages/:conversationId?" element={<RequireFreshPassword><Messages /></RequireFreshPassword>} />
