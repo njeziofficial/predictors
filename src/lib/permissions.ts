@@ -10,7 +10,7 @@ import { api, type Permission } from "@/lib/api";
 export const usePermissions = () => {
   const { currentUser } = useApp();
   const isAdmin = currentUser?.role === "admin";
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["admin-permissions-me", currentUser?.id],
     queryFn: api.admin.permissions.mine,
     enabled: isAdmin,
@@ -18,7 +18,10 @@ export const usePermissions = () => {
   });
   const isSystemUser = data?.isSystemUser ?? currentUser?.isSystemUser === true;
   return {
-    isLoading: isAdmin && isLoading,
+    // The system admin may do everything, so there's nothing to wait for (the request can take a
+    // minute while the backend wakes).
+    isLoading: isAdmin && isLoading && !isSystemUser,
+    isError: isAdmin && isError && !isSystemUser,
     isSystemUser,
     can: (permission: Permission) => isSystemUser || data?.permissions[permission] === true,
   };

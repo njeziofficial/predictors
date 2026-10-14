@@ -39,7 +39,7 @@ const APP_ITEMS = [
 const ChooseDestination = () => {
   const { currentUser, logout } = useApp();
   const navigate = useNavigate();
-  const { can, isSystemUser, isLoading } = usePermissions();
+  const { can, isSystemUser, isLoading, isError } = usePermissions();
 
   useEffect(() => {
     if (!currentUser) navigate("/");
@@ -112,6 +112,8 @@ const ChooseDestination = () => {
                   <li className="flex items-center gap-2">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking your access…
                   </li>
+                ) : isError ? (
+                  <li>Couldn't check your access just now. You can still open the back office.</li>
                 ) : backOfficeItems.length > 0 ? (
                   backOfficeItems.map(({ icon: Icon, text }) => (
                     <li key={text} className="flex items-center gap-2">
