@@ -150,7 +150,12 @@ describe("signing in with fingerprint or face", () => {
   });
 
   it("says nothing when the player closes the prompt", async () => {
-    fakeDevice(async () => Promise.reject(new DOMException("dismissed", "NotAllowedError")));
+    // The prompt was up for a few seconds before they closed it.
+    const now = Date.now();
+    fakeDevice(async () => {
+      vi.spyOn(Date, "now").mockReturnValue(now + 5_000);
+      throw new DOMException("dismissed", "NotAllowedError");
+    });
     const { onSignedIn, onError } = await renderButton();
     const button = await screen.findByText("Sign in with fingerprint or face unlock");
     await act(async () => {
@@ -159,6 +164,16 @@ describe("signing in with fingerprint or face", () => {
     await waitFor(() => expect(navigator.credentials.get).toHaveBeenCalled());
     expect(onSignedIn).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalledWith(expect.any(String));
+  });
+
+  it("says why when the phone refuses straight away, without showing a prompt", async () => {
+    fakeDevice(async () => Promise.reject(new DOMException("refused", "NotAllowedError")));
+    const { onError } = await renderButton();
+    const button = await screen.findByText("Sign in with fingerprint or face unlock");
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringContaining("Your phone has no fingerprint or face sign-in")));
   });
 
   it("isn't shown on a device without fingerprint or face", async () => {

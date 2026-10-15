@@ -34,7 +34,6 @@ export async function biometricsAvailable(): Promise<boolean> {
   }
 }
 
-// Whether a passkey was set up or used on this device, so the sign-in page can lead with it.
 // Which passkey is this device's (its credential id, base64url), once it's been set up or used
 // here, so Profile can show the switch for this device and the sign-in page can lead with it.
 const HERE_KEY = "op_passkey_here";
@@ -156,12 +155,26 @@ export class PasskeyCancelled extends Error {
   }
 }
 
-const browserError = (err: unknown): Error => {
+// Under this, a refusal came before any prompt could have been shown: the phone said no by
+// itself (no passkey manager, no screen lock…) rather than the player cancelling.
+const INSTANT_MS = 1500;
+
+const browserError = (err: unknown, startedAt: number, creating: boolean): Error => {
   if (err instanceof DOMException) {
-    // NotAllowedError: dismissed, timed out, or the check failed. AbortError: cancelled.
-    if (err.name === "NotAllowedError" || err.name === "AbortError") return new PasskeyCancelled();
+    // NotAllowedError: dismissed, timed out, or refused. AbortError: cancelled.
+    if (err.name === "AbortError") return new PasskeyCancelled();
+    if (err.name === "NotAllowedError") {
+      if (Date.now() - startedAt > INSTANT_MS) return new PasskeyCancelled();
+      return new Error(
+        creating
+          ? "Your phone didn't let the app save a passkey. Check that a screen lock and a fingerprint or face are set up, and that a passkey manager is on (Android: Settings › Passwords & accounts › Google Password Manager; iPhone: Settings › Passwords › iCloud Keychain)."
+          : "Your phone has no fingerprint or face sign-in for this account. Sign in with your password, then turn it on in Profile.",
+      );
+    }
     if (err.name === "InvalidStateError") return new Error("This device is already set up for your account.");
     if (err.name === "SecurityError") return new Error("Passkeys don't work on this address. Open the app from its usual link.");
+    // Anything else: say what the phone said, so it can be looked into.
+    return new Error(`Your phone couldn't do that (${err.name}${err.message ? `: ${err.message}` : ""}).`);
   }
   return err instanceof Error ? err : new Error("Your device couldn't do that.");
 };
@@ -169,10 +182,11 @@ const browserError = (err: unknown): Error => {
 /** Asks the device to create a passkey; the answer as the server's JSON. */
 export async function createPasskey(options: CreationOptionsJson): Promise<PasskeyAnswer> {
   let credential: PublicKeyCredential;
+  const startedAt = Date.now();
   try {
     credential = (await navigator.credentials.create({ publicKey: creationOptions(options) })) as PublicKeyCredential;
   } catch (err) {
-    throw browserError(err);
+    throw browserError(err, startedAt, true);
   }
   if (!credential) throw new PasskeyCancelled();
   const response = credential.response as AuthenticatorAttestationResponse;
@@ -192,10 +206,11 @@ export async function createPasskey(options: CreationOptionsJson): Promise<Passk
 /** Asks the device to sign in with one of its passkeys for this site; the answer as the server's JSON. */
 export async function askForPasskey(options: RequestOptionsJson): Promise<PasskeyAnswer> {
   let credential: PublicKeyCredential;
+  const startedAt = Date.now();
   try {
     credential = (await navigator.credentials.get({ publicKey: requestOptions(options) })) as PublicKeyCredential;
   } catch (err) {
-    throw browserError(err);
+    throw browserError(err, startedAt, false);
   }
   if (!credential) throw new PasskeyCancelled();
   const response = credential.response as AuthenticatorAssertionResponse;
