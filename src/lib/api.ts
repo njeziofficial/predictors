@@ -267,6 +267,9 @@ export interface NotificationPreferencesDto {
   announcements: boolean;
   // The same by email, when push is on in none of the player's browsers.
   email: boolean;
+  // Chat messages pushed while the app isn't open, and whether they show the message text.
+  messages: boolean;
+  messagePreview: boolean;
 }
 
 export interface PasswordTokenDto {

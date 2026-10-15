@@ -171,9 +171,18 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       invalidateLiveAreas(queryClient, areas);
     });
 
+    // Whether the app is in front: while it isn't, the server pushes new messages to the
+    // phone instead (a backgrounded app can keep this connection for a while).
+    const reportActive = () => {
+      if (connection.state !== HubConnectionState.Connected) return;
+      connection.invoke("SetActive", document.visibilityState === "visible").catch(() => {});
+    };
+    document.addEventListener("visibilitychange", reportActive);
+
     connection.onreconnecting(() => setStatus("reconnecting"));
     connection.onreconnected(() => {
       setStatus("connected");
+      reportActive();
       // Whatever happened while we were away: fetch it rather than guess.
       setPresence({});
       queryClient.invalidateQueries({ queryKey: chatKeys.all });
@@ -188,7 +197,10 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       setStatus("connecting");
       try {
         await connection.start();
-        if (!cancelled) setStatus("connected");
+        if (!cancelled) {
+          setStatus("connected");
+          reportActive();
+        }
       } catch {
         // withAutomaticReconnect only covers drops after a successful start.
         if (!cancelled) {
@@ -201,6 +213,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
 
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", reportActive);
       connectionRef.current = null;
       connection.stop().catch(() => {});
       setStatus("offline");

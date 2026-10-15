@@ -70,7 +70,7 @@ const NotificationChoices = () => {
     onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn't save your choice."),
   });
 
-  const choices: { key: keyof NotificationPreferencesDto; label: string; help: string }[] = [
+  const choices: { key: keyof NotificationPreferencesDto; label: string; help: string; dependsOn?: keyof NotificationPreferencesDto }[] = [
     {
       key: "reminders",
       label: "Prediction reminders",
@@ -82,6 +82,17 @@ const NotificationChoices = () => {
       help: "Notifications the league's admins send, like a change to the fixtures.",
     },
     {
+      key: "messages",
+      label: "Messages",
+      help: "When someone messages you in the app and you don't have it open.",
+    },
+    {
+      key: "messagePreview",
+      label: "Show the message",
+      help: "Off: the notification only says who it's from, so nobody can read it on your lock screen.",
+      dependsOn: "messages",
+    },
+    {
       key: "email",
       label: "By email when notifications are off",
       help: "If notifications aren't on in any of your browsers, get the reminders and news above by email instead.",
@@ -91,7 +102,7 @@ const NotificationChoices = () => {
   return (
     <div className="space-y-3">
       {choices.map((c) => (
-        <div key={c.key} className="flex items-start justify-between gap-4">
+        <div key={c.key} className={`flex items-start justify-between gap-4 ${c.dependsOn ? "pl-5" : ""}`}>
           <div>
             <Label htmlFor={`notify-${c.key}`}>{c.label}</Label>
             <p className="text-xs text-muted-foreground">{c.help}</p>
@@ -99,7 +110,7 @@ const NotificationChoices = () => {
           <Switch
             id={`notify-${c.key}`}
             checked={prefs?.[c.key] ?? true}
-            disabled={!prefs || isPending}
+            disabled={!prefs || isPending || (c.dependsOn !== undefined && prefs?.[c.dependsOn] === false)}
             onCheckedChange={(on) => prefs && save({ ...prefs, [c.key]: on })}
           />
         </div>
