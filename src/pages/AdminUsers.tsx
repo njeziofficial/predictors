@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, subDays } from "date-fns";
 import { toast } from "sonner";
@@ -17,6 +17,8 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  EllipsisVertical,
+  Pencil,
 } from "lucide-react";
 import { BrandLoader } from "@/components/Brand";
 import { api, type UserSummaryDto } from "@/lib/api";
@@ -30,8 +32,14 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   AlertDialog,
-  AlertDialogTrigger,
   AlertDialogContent,
   AlertDialogHeader,
   AlertDialogTitle,
@@ -88,11 +96,55 @@ const compareUsers = (sort: SortKey) => (a: UserSummaryDto, b: UserSummaryDto) =
   }
 };
 
+type RowAction = {
+  key: string;
+  label: string;
+  icon: typeof Pencil;
+  onSelect: () => void;
+  // Set when this admin can't do it to this user; shown under the greyed-out item.
+  disabledReason?: string;
+  destructive?: boolean;
+};
+
+// A row's actions behind ⋮, so they're in the first column instead of past the right edge.
+// Not modal: a modal menu that opens a dialog can leave the page unclickable when both close.
+const RowActions = ({ user, actions, busy }: { user: UserSummaryDto; actions: RowAction[]; busy: boolean }) => {
+  if (actions.length === 0) return <span className="px-2 text-muted-foreground">—</span>;
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${user.name}`} disabled={busy}>
+          <EllipsisVertical className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-64">
+        {actions.map((a) => (
+          <Fragment key={a.key}>
+            {a.destructive && <DropdownMenuSeparator />}
+            <DropdownMenuItem
+              disabled={!!a.disabledReason}
+              onSelect={a.onSelect}
+              className={`items-start gap-2.5 py-2 ${a.destructive ? "text-destructive focus:text-destructive" : ""}`}
+            >
+              <a.icon className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                {a.label}
+                {a.disabledReason && <span className="block text-[11px] font-normal text-muted-foreground">{a.disabledReason}</span>}
+              </span>
+            </DropdownMenuItem>
+          </Fragment>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+
 const AdminUsers = () => {
   const queryClient = useQueryClient();
   const { currentUser } = useApp();
   const { can, isSystemUser } = usePermissions();
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [pendingResetId, setPendingResetId] = useState<string | null>(null);
   const [resetResult, setResetResult] = useState<{ name: string; password: string; role: "user" | "admin" } | null>(
@@ -232,6 +284,65 @@ const AdminUsers = () => {
     onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to delete user."),
   });
 
+  const editingUser = users?.find((u) => u.id === editingId) ?? null;
+  const resettingUser = users?.find((u) => u.id === pendingResetId) ?? null;
+  const deletingUser = users?.find((u) => u.id === pendingDeleteId) ?? null;
+
+  const actionsFor = (u: UserSummaryDto): RowAction[] => {
+    const actions: RowAction[] = [];
+    if (can("users.edit") && (u.role !== "admin" || isSystemUser))
+      actions.push({ key: "edit", label: "Edit details", icon: Pencil, onSelect: () => setEditingId(u.id) });
+    // Promoting and demoting admins is the system admin's alone.
+    if (isSystemUser)
+      actions.push({
+        key: "role",
+        label: u.role === "admin" ? "Demote to player" : "Promote to admin",
+        icon: u.role === "admin" ? ShieldOff : Shield,
+        disabledReason: u.isSystemUser ? "The system user's role cannot be changed" : undefined,
+        onSelect: () => setRole({ id: u.id, role: u.role === "admin" ? "User" : "Admin" }),
+      });
+    if (can("users.status"))
+      actions.push({
+        key: "status",
+        label: u.isDisabled ? "Enable account" : "Disable account",
+        icon: u.isDisabled ? CircleCheck : Ban,
+        disabledReason: u.isSystemUser
+          ? "The system user can never be disabled"
+          : u.id === currentUser?.id
+            ? "You cannot disable your own account"
+            : u.role === "admin" && !isSystemUser
+              ? "Only the system admin can enable or disable an admin"
+              : undefined,
+        onSelect: () => setStatus({ id: u.id, isDisabled: !u.isDisabled }),
+      });
+    if (can("users.reset_password"))
+      actions.push({
+        key: "reset",
+        label: "Reset password",
+        icon: KeyRound,
+        disabledReason: u.isSystemUser
+          ? "The system user's password can never be changed"
+          : u.role === "admin" && currentUser?.isSystemUser !== true
+            ? "Only the system user can reset another admin's password"
+            : undefined,
+        onSelect: () => setPendingResetId(u.id),
+      });
+    if (can("users.delete"))
+      actions.push({
+        key: "delete",
+        label: "Delete user",
+        icon: Trash2,
+        destructive: true,
+        disabledReason: u.isSystemUser
+          ? "The system user can never be deleted"
+          : u.role === "admin" && currentUser?.isSystemUser !== true
+            ? "Only the system user can delete another admin"
+            : undefined,
+        onSelect: () => setPendingDeleteId(u.id),
+      });
+    return actions;
+  };
+
   return (
     <AdminLayout permission="users.view">
       <div className="mx-auto max-w-6xl px-6 pt-8 pb-8 space-y-6">
@@ -354,6 +465,7 @@ const AdminUsers = () => {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-14">Action</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
@@ -362,7 +474,6 @@ const AdminUsers = () => {
                   <TableHead>Status</TableHead>
                   <TableHead>Joined</TableHead>
                   <TableHead>Last login</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -375,6 +486,13 @@ const AdminUsers = () => {
                 )}
                 {pagedUsers.map((u: UserSummaryDto) => (
                   <TableRow key={u.id}>
+                    <TableCell className="py-2">
+                      <RowActions
+                        user={u}
+                        actions={actionsFor(u)}
+                        busy={isSettingRole || isSettingStatus || isResetting || isDeleting}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">
                       <span className="flex items-center gap-1.5">
                         {u.name}
@@ -414,143 +532,6 @@ const AdminUsers = () => {
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {u.lastLoginAt ? format(new Date(u.lastLoginAt), "MMM d, HH:mm") : "Never"}
-                    </TableCell>
-                    <TableCell className="text-right space-x-1 whitespace-nowrap">
-                      {can("users.edit") && (u.role !== "admin" || isSystemUser) && <EditUserDialog user={u} />}
-                      {/* Promoting and demoting admins is the system admin's alone. */}
-                      {isSystemUser && (() => {
-                        return (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={isSettingRole || u.isSystemUser}
-                            title={u.isSystemUser ? "The system user's role cannot be changed" : undefined}
-                            onClick={() => setRole({ id: u.id, role: u.role === "admin" ? "User" : "Admin" })}
-                          >
-                            {u.role === "admin" ? (
-                              <>
-                                <ShieldOff className="h-3.5 w-3.5 mr-1" /> Demote
-                              </>
-                            ) : (
-                              <>
-                                <Shield className="h-3.5 w-3.5 mr-1" /> Promote
-                              </>
-                            )}
-                          </Button>
-                        );
-                      })()}
-                      {can("users.status") && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={
-                          isSettingStatus || u.id === currentUser?.id || u.isSystemUser || (u.role === "admin" && !isSystemUser)
-                        }
-                        title={
-                          u.isSystemUser
-                            ? "The system user can never be disabled"
-                            : u.id === currentUser?.id
-                              ? "You cannot disable your own account"
-                              : u.role === "admin" && !isSystemUser
-                                ? "Only the system admin can enable or disable an admin"
-                                : undefined
-                        }
-                        onClick={() => setStatus({ id: u.id, isDisabled: !u.isDisabled })}
-                      >
-                        {u.isDisabled ? (
-                          <>
-                            <CircleCheck className="h-3.5 w-3.5 mr-1" /> Enable
-                          </>
-                        ) : (
-                          <>
-                            <Ban className="h-3.5 w-3.5 mr-1" /> Disable
-                          </>
-                        )}
-                      </Button>
-                      )}
-                      {can("users.reset_password") && (() => {
-                        const canReset =
-                          !u.isSystemUser && (u.role !== "admin" || currentUser?.isSystemUser === true);
-                        const disabledReason = u.isSystemUser
-                          ? "The system user's password can never be changed"
-                          : u.role === "admin"
-                            ? "Only the system user can reset another admin's password"
-                            : undefined;
-                        return (
-                          <AlertDialog
-                            open={pendingResetId === u.id}
-                            onOpenChange={(open) => setPendingResetId(open ? u.id : null)}
-                          >
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={isResetting || !canReset}
-                                title={disabledReason}
-                              >
-                                <KeyRound className="h-3.5 w-3.5" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Reset {u.name}'s password?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  {u.role === "admin"
-                                    ? `A new password will be generated and shown once. Unlike a regular user, ${u.name} won't be forced to change it — this becomes their password directly, and only the system user can reset it again.`
-                                    : `A new temporary password will be generated and shown once. ${u.name} will be forced to change it the next time they try to submit predictions.`}
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction disabled={isResetting} onClick={() => resetPassword(u.id)}>
-                                  {isResetting && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
-                                  Reset password
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        );
-                      })()}
-                      {can("users.delete") && (() => {
-                        const deleteBlocked = u.role === "admin" && currentUser?.isSystemUser !== true;
-                        const deleteDisabledReason = u.isSystemUser
-                          ? "The system user can never be deleted"
-                          : deleteBlocked
-                            ? "Only the system user can delete another admin"
-                            : undefined;
-                        return (
-                      <AlertDialog
-                        open={pendingDeleteId === u.id}
-                        onOpenChange={(open) => setPendingDeleteId(open ? u.id : null)}
-                      >
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={u.isSystemUser || deleteBlocked}
-                            title={deleteDisabledReason}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete {u.name}?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This permanently deletes the user and all of their predictions. This cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction disabled={isDeleting} onClick={() => removeUser(u.id)}>
-                              {isDeleting && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                        );
-                      })()}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -602,6 +583,61 @@ const AdminUsers = () => {
             </div>
           </div>
         )}
+
+        {editingUser && (
+          <EditUserDialog user={editingUser} open onOpenChange={(open) => !open && setEditingId(null)} />
+        )}
+
+        <AlertDialog open={!!resettingUser} onOpenChange={(open) => !open && setPendingResetId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Reset {resettingUser?.name}'s password?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {resettingUser?.role === "admin"
+                  ? `A new password will be generated and shown once. Unlike a regular user, ${resettingUser.name} won't be forced to change it — this becomes their password directly, and only the system user can reset it again.`
+                  : `A new temporary password will be generated and shown once. ${resettingUser?.name} will be forced to change it the next time they try to submit predictions.`}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={isResetting}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (resettingUser) resetPassword(resettingUser.id);
+                }}
+              >
+                {isResetting && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
+                Reset password
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={!!deletingUser} onOpenChange={(open) => !open && setPendingDeleteId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete {deletingUser?.name}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently deletes the user and all of their predictions. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={isDeleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (deletingUser) removeUser(deletingUser.id);
+                }}
+              >
+                {isDeleting && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <AlertDialog open={!!resetResult} onOpenChange={(open) => !open && setResetResult(null)}>
           <AlertDialogContent>

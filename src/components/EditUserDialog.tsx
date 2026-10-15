@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, Pencil } from "lucide-react";
@@ -49,10 +49,28 @@ const validate = (changes: UpdateUserDetailsPayload, isSystemUser: boolean) => {
 };
 
 // System user only: edit a user's name, email, phone and WhatsApp name. Save is enabled as soon
-// as any one field changes, and only the changed fields are sent.
-const EditUserDialog = ({ user }: { user: UserSummaryDto }) => {
+// as any one field changes, and only the changed fields are sent. Opened by its own Edit button,
+// or, given `open`/`onOpenChange`, from elsewhere (the Users table's action menu), with no button.
+const EditUserDialog = ({
+  user,
+  open: controlledOpen,
+  onOpenChange,
+}: {
+  user: UserSummaryDto;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) => {
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const controlled = controlledOpen !== undefined;
+  const open = controlled ? controlledOpen : ownOpen;
+  const setOpen = (next: boolean) => (controlled ? onOpenChange?.(next) : setOwnOpen(next));
+
+  // Opened from outside: start from the latest saved details, as the Edit button does.
+  useEffect(() => {
+    if (controlled && controlledOpen) setForm(toForm(user));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controlled, controlledOpen, user.id]);
   const [form, setForm] = useState<Form>(() => toForm(user));
 
   const original = toForm(user);
@@ -106,11 +124,13 @@ const EditUserDialog = ({ user }: { user: UserSummaryDto }) => {
         if (next) setForm(toForm(user));
       }}
     >
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm" title="Edit details">
-          <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
-        </Button>
-      </DialogTrigger>
+      {!controlled && (
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm" title="Edit details">
+            <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <DialogHeader>
