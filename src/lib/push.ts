@@ -96,6 +96,21 @@ export async function syncPushSubscription(): Promise<void> {
 }
 
 /**
+ * Closes the notifications this app has shown on the device, so the phone's notification panel
+ * and the launcher's count clear once the player is in the app, where the same notifications are
+ * listed (NotificationBell).
+ */
+export async function clearShownNotifications(): Promise<void> {
+  try {
+    if (!("serviceWorker" in navigator)) return;
+    const registration = await navigator.serviceWorker.getRegistration();
+    (await registration?.getNotifications())?.forEach((n) => n.close());
+  } catch {
+    // Nothing shown, or not supported here.
+  }
+}
+
+/**
  * On sign-out: unsubscribes this browser, so the next person to use it doesn't get the last
  * one's reminders. The backend forgets the subscription when its push service reports it gone.
  */

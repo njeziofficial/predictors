@@ -120,10 +120,7 @@ const AdminNotifications = () => {
     !bodyText && "Write the message.",
     !isAppPath(url) && "The link must be a page in the app, starting with /.",
     !targetReady && (audience === "yet-to-predict" ? "Choose the week." : "Choose at least one player."),
-    targetReady &&
-      reach?.willReceive === 0 &&
-      !reach?.willEmail &&
-      `Nobody in this audience will get it: they have notifications off${important ? "" : ", or turned off news from the admins"}.`,
+    targetReady && reach?.inApp === 0 && "Everyone in this audience turned off news from the admins.",
     alsoEmail &&
       reach?.emailsLeftToday != null &&
       (reach.willEmail ?? 0) > reach.emailsLeftToday &&
@@ -365,14 +362,17 @@ const AdminNotifications = () => {
               "Counting…"
             ) : reach ? (
               <span>
-                <span className="font-medium text-foreground">{reach.willReceive}</span> of {reach.inAudience}{" "}
-                {reach.inAudience === 1 ? "player" : "players"} in this audience will get it on their phone
+                <span className="font-medium text-foreground">{reach.inApp ?? reach.inAudience}</span> of {reach.inAudience}{" "}
+                {reach.inAudience === 1 ? "player" : "players"} will see it in the app;{" "}
+                <span className="font-medium text-foreground">{reach.willReceive}</span> get it on their phone
                 {alsoEmail && reach.willEmail ? (
                   <>
                     , and <span className="font-medium text-foreground">{reach.willEmail}</span> by email
                   </>
                 ) : null}
-                . The rest have notifications off{important ? "" : " or muted news from the admins"}.
+                .
+                {!important && (reach.inApp ?? reach.inAudience) < reach.inAudience &&
+                  " The rest turned off news from the admins."}
               </span>
             ) : (
               "Couldn't count this audience."

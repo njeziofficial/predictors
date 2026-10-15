@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, Mail } from "lucide-react";
+import { Loader2, Mail, X } from "lucide-react";
 import { api, type EmailProviderName, type EmailStatusDto } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -111,6 +111,12 @@ const EmailStatusCard = () => {
     onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn't change the email provider."),
   });
 
+  const { mutate: clearErrors, isPending: clearing } = useMutation({
+    mutationFn: api.admin.email.clearErrors,
+    onSuccess: (next: EmailStatusDto) => queryClient.setQueryData(["email-status"], next),
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn't clear the notice."),
+  });
+
   const { mutate: sendTest, isPending: testing } = useMutation({
     mutationFn: api.admin.email.test,
     onSuccess: ({ message }) => {
@@ -206,9 +212,19 @@ const EmailStatusCard = () => {
             </p>
           )}
           {status.failedToday > 0 && (
-            <div className="rounded-lg bg-destructive/10 border border-destructive/30 px-3 py-2 text-xs text-destructive">
+            <div className="relative rounded-lg bg-destructive/10 border border-destructive/30 py-2 pl-3 pr-9 text-xs text-destructive">
               {status.failedToday} {status.failedToday === 1 ? "email" : "emails"} didn't go out today.
               {status.lastError && <span className="block mt-1 break-words">Last error: {status.lastError}</span>}
+              <button
+                type="button"
+                onClick={() => clearErrors()}
+                disabled={clearing}
+                aria-label="Clear this notice"
+                title="Clear this notice (a new failure will show again)"
+                className="absolute right-2 top-2 rounded p-0.5 text-destructive/70 transition-colors hover:bg-destructive/15 hover:text-destructive disabled:opacity-50"
+              >
+                {clearing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+              </button>
             </div>
           )}
           <SendersForm status={status} />

@@ -9,7 +9,7 @@ import {
   type StoredUser,
 } from "@/lib/auth";
 import { api } from "@/lib/api";
-import { forgetPushOnThisDevice, syncPushSubscription } from "@/lib/push";
+import { clearShownNotifications, forgetPushOnThisDevice, syncPushSubscription } from "@/lib/push";
 
 interface AppState {
   currentUser: StoredUser | null;
@@ -39,6 +39,20 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (currentUser?.id) void syncPushSubscription();
   }, [currentUser?.id]);
+
+  // In the app, its notifications on the phone have done their job: clear them (and the
+  // launcher's count), and refresh the in-app list they're kept in.
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void clearShownNotifications();
+      queryClient.invalidateQueries({ queryKey: ["inbox"] });
+    };
+    onVisible();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [currentUser?.id, queryClient]);
 
   // Keep currentUser in step with storage when it changes outside React: a silent token
   // refresh in this tab, or a login/logout/refresh in another tab.

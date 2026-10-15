@@ -110,6 +110,7 @@ const NotificationChoices = () => {
 
 /** For the Profile page: what to be notified about, and notifications on this device. */
 export const NotificationsCard = () => {
+  const queryClient = useQueryClient();
   const { state, busy, turnOn, turnOff } = usePushState();
   const [testing, setTesting] = useState(false);
 
@@ -117,6 +118,7 @@ export const NotificationsCard = () => {
     setTesting(true);
     try {
       const { reached } = await api.push.test();
+      queryClient.invalidateQueries({ queryKey: ["inbox"] });
       if (reached > 0) toast.success("Test sent. It should appear in a few seconds.");
       else toast.error("This device didn't take the test. Turn notifications off and on again.");
     } catch (err) {

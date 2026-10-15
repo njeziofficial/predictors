@@ -337,6 +337,25 @@ export interface NotificationAudienceDto {
   willEmail?: number;
   // Null when email isn't set up.
   emailsLeftToday?: number | null;
+  // Players who'll see it in the app's notifications (everyone who didn't turn admin news off).
+  inApp?: number;
+}
+
+// The signed-in user's in-app notifications.
+export interface InboxItemDto {
+  id: string;
+  kind: "reminder" | "announcement" | "test";
+  title: string;
+  body: string;
+  // A page in the app.
+  url: string;
+  createdAt: string;
+  read: boolean;
+}
+
+export interface InboxDto {
+  unread: number;
+  items: InboxItemDto[];
 }
 
 export interface NotificationPlayerDto {
@@ -814,6 +833,13 @@ export const api = {
       request<void>("/api/auth/set-password", { method: "POST", body: JSON.stringify({ token, newPassword }) }),
   },
 
+  // In-app notifications: reminders and admin notifications, kept for the next visit.
+  notifications: {
+    list: () => request<InboxDto>("/api/notifications"),
+    markRead: (id: string) => request<void>(`/api/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
+    markAllRead: () => request<void>("/api/notifications/read-all", { method: "POST" }),
+  },
+
   // Push notifications for this browser (see lib/push.ts).
   push: {
     publicKey: () => request<{ publicKey: string }>("/api/push/public-key"),
@@ -964,6 +990,8 @@ export const api = {
       setSenders: (senders: { senderName: string; resend: string; brevo: string; gmail: string }) =>
         request<EmailStatusDto>("/api/admin/email/senders", { method: "PUT", body: JSON.stringify(senders) }),
       test: () => request<{ message: string }>("/api/admin/email/test", { method: "POST" }),
+      // Hides the failures shown so far; later ones show again.
+      clearErrors: () => request<EmailStatusDto>("/api/admin/email/clear-errors", { method: "POST" }),
     },
     setPredictionsLock: (locked: boolean) =>
       request<ScraperSettingsDto>("/api/admin/predictions-lock", {

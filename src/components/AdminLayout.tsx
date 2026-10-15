@@ -19,6 +19,7 @@ import {
   BellRing,
 } from "lucide-react";
 import { BrandLoader, BrandLogo, BrandMark } from "@/components/Brand";
+import NotificationBell from "@/components/NotificationBell";
 import { useApp } from "@/context/AppContext";
 import { useChat } from "@/context/ChatContext";
 import { setArea, usePermissions } from "@/lib/permissions";
@@ -130,6 +131,7 @@ const AdminLayout = ({
         <div className="flex items-center justify-between px-4 py-3">
           <BrandLogo label="Admin CMS" />
           <div className="flex items-center gap-1">
+            <NotificationBell />
             <button
               onClick={goToApp}
               className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
@@ -168,12 +170,13 @@ const AdminLayout = ({
       <aside className="sticky top-0 hidden h-screen w-56 shrink-0 border-r border-border md:flex md:flex-col">
         <div className="flex items-center gap-2 px-4 py-4 border-b border-border">
           <BrandMark className="h-9 w-9" />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <span className="block font-bold text-foreground text-sm">Admin CMS</span>
             <span className="block truncate text-[10px] text-muted-foreground">
               {isSystemUser ? "System admin" : "Admin"} · {currentUser.name}
             </span>
           </div>
+          <NotificationBell />
         </div>
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
           {visible.map((item) => {

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ClipboardList, Trophy, Radio, Clock, User, LogOut, LayoutDashboard, MessageCircle } from "lucide-react";
 import { BrandLogo } from "@/components/Brand";
+import NotificationBell from "@/components/NotificationBell";
 import CompetitionSwitcher from "@/components/CompetitionSwitcher";
 import { useApp } from "@/context/AppContext";
 import { useChat } from "@/context/ChatContext";
@@ -71,6 +72,7 @@ const NavBar = () => {
           })}
         </nav>
         <div className="flex items-center gap-1">
+          <NotificationBell />
           {currentUser?.role === "admin" && (
             <button
               onClick={() => {
