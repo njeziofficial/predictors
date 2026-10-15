@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import NavBar from "@/components/NavBar";
 import AdminLayout from "@/components/AdminLayout";
 import { NotificationsCard } from "@/components/PushNotifications";
+import { InstallCard } from "@/components/InstallApp";
 import { getArea } from "@/lib/permissions";
 
 const ProfileBody = ({ profile }: { profile: UserProfileDto }) => {
@@ -121,6 +122,7 @@ const ProfileBody = ({ profile }: { profile: UserProfileDto }) => {
         </Button>
       </div>
 
+      <InstallCard />
       <NotificationsCard />
 
       {profile.role === "admin" ? (

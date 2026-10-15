@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -238,9 +238,14 @@ const Login = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="login-password" className="text-xs font-medium text-muted-foreground">
-                  Password
-                </Label>
+                <div className="flex items-baseline justify-between">
+                  <Label htmlFor="login-password" className="text-xs font-medium text-muted-foreground">
+                    Password
+                  </Label>
+                  <Link to="/forgot-password" className="text-xs font-medium text-primary hover:underline">
+                    Forgot password?
+                  </Link>
+                </div>
                 <div className="relative">
                   <Lock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <PasswordInput

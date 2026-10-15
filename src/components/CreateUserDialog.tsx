@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, UserPlus, Copy, Check } from "lucide-react";
+import { Loader2, UserPlus, Copy, Check, MailCheck } from "lucide-react";
 import { api, type CreateUserPayload } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,7 +38,7 @@ const validate = (form: typeof EMPTY_FORM) => {
   return errors;
 };
 
-type Created = { name: string; role: CreateUserPayload["role"]; password: string | null };
+type Created = { name: string; email: string; role: CreateUserPayload["role"]; password: string | null; welcomeEmailSent: boolean };
 
 // Only the system admin may create admins (`allowAdmin`); the backend refuses it for anyone else.
 const CreateUserDialog = ({ allowAdmin = false }: { allowAdmin?: boolean }) => {
@@ -66,7 +66,13 @@ const CreateUserDialog = ({ allowAdmin = false }: { allowAdmin?: boolean }) => {
     onSuccess: (res, payload) => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       toast.success(`${res.user.name} created.`);
-      setCreated({ name: res.user.name, role: payload.role, password: res.temporaryPassword });
+      setCreated({
+        name: res.user.name,
+        email: payload.email,
+        role: payload.role,
+        password: res.temporaryPassword,
+        welcomeEmailSent: res.welcomeEmailSent === true,
+      });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to create user."),
   });
@@ -114,6 +120,15 @@ const CreateUserDialog = ({ allowAdmin = false }: { allowAdmin?: boolean }) => {
                     : "The user can log in with the password you set, and will be forced to change it before they can submit predictions."}
               </DialogDescription>
             </DialogHeader>
+            {created.welcomeEmailSent && (
+              <div className="flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-xs">
+                <MailCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+                <span>
+                  A welcome email went to <span className="font-medium">{created.email}</span> with a link to choose their
+                  own password (it works for 7 days). The password below still works if the email doesn't arrive.
+                </span>
+              </div>
+            )}
             {created.password && (
               <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-2">
                 <code className="flex-1 font-mono text-sm">{created.password}</code>

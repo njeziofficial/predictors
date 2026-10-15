@@ -27,6 +27,8 @@ import AdminAccessControl from "./pages/AdminAccessControl";
 import Messages from "./pages/Messages";
 import AdminMessages from "./pages/AdminMessages";
 import AdminNotifications from "./pages/AdminNotifications";
+import ForgotPassword from "./pages/ForgotPassword";
+import SetPassword from "./pages/SetPassword";
 import { ChatProvider } from "@/context/ChatContext";
 import { CompetitionProvider } from "@/context/CompetitionContext";
 
@@ -69,6 +71,8 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/set-password" element={<SetPassword />} />
               <Route path="/reset-password-required" element={<ResetPasswordRequired />} />
               <Route path="/choose" element={<RequireFreshPassword><ChooseDestination /></RequireFreshPassword>} />
               <Route path="/predict" element={<RequireFreshPassword><Predictions /></RequireFreshPassword>} />

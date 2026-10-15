@@ -44,7 +44,7 @@ const usePushState = () => {
 };
 
 // iPhone and iPad only show web app notifications once the app is on the Home Screen.
-const InstallSteps = () => (
+export const InstallSteps = () => (
   <ol className="space-y-1.5 text-xs text-muted-foreground">
     <li className="flex items-center gap-2">
       <span className="font-semibold text-foreground">1.</span> Tap <Share className="h-3.5 w-3.5 text-primary" /> Share in
@@ -80,6 +80,11 @@ const NotificationChoices = () => {
       key: "announcements",
       label: "News from the admins",
       help: "Notifications the league's admins send, like a change to the fixtures.",
+    },
+    {
+      key: "email",
+      label: "By email when notifications are off",
+      help: "If notifications aren't on in any of your browsers, get the reminders and news above by email instead.",
     },
   ];
 

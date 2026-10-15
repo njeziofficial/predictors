@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
-import { BellRing, Loader2, Search, Send, ShieldAlert, Users } from "lucide-react";
+import { BellRing, Loader2, Mail, Search, Send, ShieldAlert, Users } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { BrandMark } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
@@ -68,6 +68,7 @@ const AdminNotifications = () => {
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [important, setImportant] = useState(false);
+  const [alsoEmail, setAlsoEmail] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
   const { data: players = [], isLoading: loadingPlayers } = useQuery({
@@ -91,6 +92,7 @@ const AdminNotifications = () => {
     weekId: audience === "yet-to-predict" ? weekId || undefined : undefined,
     userIds: audience === "selected" ? [...chosen].sort() : undefined,
     important,
+    email: alsoEmail,
   };
   const targetReady =
     (audience === "everyone") || (audience === "yet-to-predict" && !!weekId) || (audience === "selected" && chosen.size > 0);
@@ -120,13 +122,20 @@ const AdminNotifications = () => {
     !targetReady && (audience === "yet-to-predict" ? "Choose the week." : "Choose at least one player."),
     targetReady &&
       reach?.willReceive === 0 &&
+      !reach?.willEmail &&
       `Nobody in this audience will get it: they have notifications off${important ? "" : ", or turned off news from the admins"}.`,
+    alsoEmail &&
+      reach?.emailsLeftToday != null &&
+      (reach.willEmail ?? 0) > reach.emailsLeftToday &&
+      `That needs ${reach.willEmail} emails, but only ${reach.emailsLeftToday} more can go out today. Untick email, or send tomorrow.`,
   ].filter(Boolean) as string[];
 
   const { mutate: send, isPending: sending } = useMutation({
     mutationFn: () => api.admin.notifications.send({ ...target, title: titleText, body: bodyText, url }),
-    onSuccess: ({ reached, targeted }) => {
-      toast.success(`Sent. ${reached} of ${targeted} ${targeted === 1 ? "player" : "players"} got it.`);
+    onSuccess: ({ reached, targeted, emailed }) => {
+      toast.success(
+        `Sent. ${reached} of ${targeted} ${targeted === 1 ? "player" : "players"} got it${emailed ? `, and ${emailed} by email` : ""}.`,
+      );
       setTitle("");
       setBody("");
       setImportant(false);
@@ -318,6 +327,21 @@ const AdminNotifications = () => {
             </label>
           )}
 
+          {reach && reach.emailsLeftToday !== null && reach.emailsLeftToday !== undefined && (
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-secondary/40 p-3">
+              <Checkbox checked={alsoEmail} onCheckedChange={(v) => setAlsoEmail(v === true)} className="mt-0.5" />
+              <span>
+                <span className="flex items-center gap-1.5 text-sm font-medium">
+                  <Mail className="h-3.5 w-3.5 text-primary" /> Also send by email
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  To players in this audience with notifications off in every browser, unless they turned emails off.{" "}
+                  {reach.emailsLeftToday} more {reach.emailsLeftToday === 1 ? "email" : "emails"} can go out today.
+                </span>
+              </span>
+            </label>
+          )}
+
           {/* Phone-style preview */}
           <div className="space-y-1.5">
             <Label>Preview</Label>
@@ -342,8 +366,13 @@ const AdminNotifications = () => {
             ) : reach ? (
               <span>
                 <span className="font-medium text-foreground">{reach.willReceive}</span> of {reach.inAudience}{" "}
-                {reach.inAudience === 1 ? "player" : "players"} in this audience will get it. The rest have notifications
-                off{important ? "" : " or muted news from the admins"}.
+                {reach.inAudience === 1 ? "player" : "players"} in this audience will get it on their phone
+                {alsoEmail && reach.willEmail ? (
+                  <>
+                    , and <span className="font-medium text-foreground">{reach.willEmail}</span> by email
+                  </>
+                ) : null}
+                . The rest have notifications off{important ? "" : " or muted news from the admins"}.
               </span>
             ) : (
               "Couldn't count this audience."
@@ -379,7 +408,8 @@ const AdminNotifications = () => {
                   </div>
                   <p className="text-xs text-muted-foreground">{b.body}</p>
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    {audienceText(b)} · {b.reached} of {b.targeted} reached · by {b.sentByName}
+                    {audienceText(b)} · {b.reached} of {b.targeted} reached
+                    {b.emailed ? ` · ${b.emailed} emailed` : ""} · by {b.sentByName}
                     {b.important && <span className="ml-1 text-destructive">· Important</span>}
                   </p>
                 </li>
@@ -395,7 +425,7 @@ const AdminNotifications = () => {
             <AlertDialogTitle>Send this notification?</AlertDialogTitle>
             <AlertDialogDescription>
               "{titleText}" goes to {reach?.willReceive ?? 0} {reach?.willReceive === 1 ? "player's" : "players'"} phones
-              straight away. It can't be taken back.
+              {alsoEmail && reach?.willEmail ? ` and ${reach.willEmail} by email` : ""} straight away. It can't be taken back.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

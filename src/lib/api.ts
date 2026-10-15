@@ -265,6 +265,48 @@ export type Permission =
 export interface NotificationPreferencesDto {
   reminders: boolean;
   announcements: boolean;
+  // The same by email, when push is on in none of the player's browsers.
+  email: boolean;
+}
+
+export interface PasswordTokenDto {
+  valid: boolean;
+  purpose: "reset" | "welcome" | null;
+  name: string | null;
+}
+
+export type EmailProviderName = "Resend" | "Brevo" | "Gmail";
+
+export interface EmailProviderDto {
+  name: EmailProviderName;
+  // Its credentials are set on the server.
+  configured: boolean;
+  // The one sending now.
+  active: boolean;
+  // Who its emails come from now ("Name <address>"), or null with no address at all.
+  from: string | null;
+  // The address set on the admin page (null: none, so serverAddress is used).
+  savedAddress: string | null;
+  serverAddress: string | null;
+  sentToday: number;
+  dailyLimit: number;
+  sentThisMonth: number;
+  monthlyLimit: number;
+}
+
+// System admin only: email providers, the chosen one, and their use of the free limits.
+export interface EmailStatusDto {
+  configured: boolean;
+  // "auto" or a provider name.
+  choice: string;
+  active: EmailProviderName | null;
+  appUrl: string;
+  dailyReserve: number;
+  senderName: string;
+  savedSenderName: string | null;
+  providers: EmailProviderDto[];
+  failedToday: number;
+  lastError: string | null;
 }
 
 export type NotificationAudience = "everyone" | "yet-to-predict" | "selected";
@@ -276,6 +318,8 @@ export interface NotificationTarget {
   weekId?: string;
   userIds?: string[];
   important: boolean;
+  // Also by email to those push can't reach.
+  email?: boolean;
 }
 
 export interface SendNotificationPayload extends NotificationTarget {
@@ -289,6 +333,10 @@ export interface SendNotificationPayload extends NotificationTarget {
 export interface NotificationAudienceDto {
   inAudience: number;
   willReceive: number;
+  // By email instead (when email was asked for).
+  willEmail?: number;
+  // Null when email isn't set up.
+  emailsLeftToday?: number | null;
 }
 
 export interface NotificationPlayerDto {
@@ -311,6 +359,7 @@ export interface PushBroadcastDto {
   important: boolean;
   targeted: number;
   reached: number;
+  emailed?: number;
   sentByName: string;
   createdAt: string;
 }
@@ -755,6 +804,14 @@ export const api = {
       }),
     // Revokes the refresh token server-side and clears its cookie.
     logout: () => request<void>("/api/auth/logout", { method: "POST" }),
+    // Emails a link to choose a new password (players only; always the same answer).
+    forgotPassword: (email: string) =>
+      request<{ message: string }>("/api/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+    // Whether a link from a Forgot password or welcome email still works.
+    checkPasswordToken: (token: string) =>
+      request<PasswordTokenDto>("/api/auth/password-token", { method: "POST", body: JSON.stringify({ token }) }),
+    setPassword: (token: string, newPassword: string) =>
+      request<void>("/api/auth/set-password", { method: "POST", body: JSON.stringify({ token, newPassword }) }),
   },
 
   // Push notifications for this browser (see lib/push.ts).
@@ -892,11 +949,21 @@ export const api = {
           body: JSON.stringify(target),
         }),
       send: (notification: SendNotificationPayload) =>
-        request<{ targeted: number; reached: number }>("/api/admin/notifications", {
+        request<{ targeted: number; reached: number; emailed?: number }>("/api/admin/notifications", {
           method: "POST",
           body: JSON.stringify(notification),
         }),
       history: () => request<PushBroadcastDto[]>("/api/admin/notifications/history"),
+    },
+    email: {
+      status: () => request<EmailStatusDto>("/api/admin/email/status"),
+      // A provider that's set up, or "auto" for the first one set up.
+      setProvider: (provider: string) =>
+        request<EmailStatusDto>("/api/admin/email/provider", { method: "PUT", body: JSON.stringify({ provider }) }),
+      // Blank fields go back to the server's sender.
+      setSenders: (senders: { senderName: string; resend: string; brevo: string; gmail: string }) =>
+        request<EmailStatusDto>("/api/admin/email/senders", { method: "PUT", body: JSON.stringify(senders) }),
+      test: () => request<{ message: string }>("/api/admin/email/test", { method: "POST" }),
     },
     setPredictionsLock: (locked: boolean) =>
       request<ScraperSettingsDto>("/api/admin/predictions-lock", {
@@ -998,7 +1065,7 @@ export const api = {
       list: () => request<UserSummaryDto[]>("/api/admin/users"),
       // System user only. When `password` is omitted the backend generates one and returns it once.
       create: (payload: CreateUserPayload) =>
-        request<{ user: UserSummaryDto; temporaryPassword: string | null }>("/api/admin/users", {
+        request<{ user: UserSummaryDto; temporaryPassword: string | null; welcomeEmailSent?: boolean }>("/api/admin/users", {
           method: "POST",
           body: JSON.stringify(payload),
         }),

@@ -27,6 +27,7 @@ import AdminLayout from "@/components/AdminLayout";
 import ScraperSourceCard from "@/components/ScraperSourceCard";
 import CompetitionsCard from "@/components/CompetitionsCard";
 import ReminderSettingsCard from "@/components/ReminderSettingsCard";
+import EmailStatusCard from "@/components/EmailStatusCard";
 import { useApp } from "@/context/AppContext";
 import { usePermissions } from "@/lib/permissions";
 
@@ -462,6 +463,7 @@ const AdminSettings = () => {
         {settings && (
           <ReminderSettingsCard settings={settings} status={status} canEdit={currentUser?.isSystemUser === true} />
         )}
+        {currentUser?.isSystemUser && <EmailStatusCard />}
 
         {!canManage && (
           <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-2 text-xs text-muted-foreground">
