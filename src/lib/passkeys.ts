@@ -173,6 +173,13 @@ const browserError = (err: unknown, startedAt: number, creating: boolean): Error
     }
     if (err.name === "InvalidStateError") return new Error("This device is already set up for your account.");
     if (err.name === "SecurityError") return new Error("Passkeys don't work on this address. Open the app from its usual link.");
+    // Android's Credential Manager failed inside the phone (seen across brands; no fix on the
+    // site's side): point at the phone's own settings, and keep the details for support.
+    if (err.name === "NotReadableError")
+      return new Error(
+        "Your phone's passkey service ran into a problem, so fingerprint sign-in couldn't be set up. Update Google Play services and Chrome, check that Google Password Manager is your passkey service (Settings › Passwords & accounts), then try again. Your password still works." +
+          (err.message ? ` (${err.message})` : ""),
+      );
     // Anything else: say what the phone said, so it can be looked into.
     return new Error(`Your phone couldn't do that (${err.name}${err.message ? `: ${err.message}` : ""}).`);
   }
