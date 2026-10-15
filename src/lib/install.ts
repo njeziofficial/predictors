@@ -3,7 +3,10 @@ import { isIos, isStandalone } from "@/lib/push";
 
 // Installing the app to the home screen. Chrome, Edge and Samsung Internet offer it through the
 // "beforeinstallprompt" event, which fires once, soon after the page loads: it's caught here at
-// startup (listenForInstallPrompt, from main.tsx) and kept until a player taps Install.
+// startup (listenForInstallPrompt, from main.tsx) and kept until a player taps Install. Only on
+// phones and tablets: a computer's browser can install it too, but nobody needs nudging there.
+// That's judged by the device (its user agent, or a touch screen as its main pointer), not the
+// screen's size, which would also catch a narrow laptop window and miss a tablet on its side.
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -35,20 +38,24 @@ export const listenForInstallPrompt = () => {
  * - in-app: inside another app's browser (WhatsApp, Instagram, Facebook...), which can't install.
  * - ios: iPhone/iPad Safari: Share → Add to Home Screen.
  * - manual: a phone browser that hasn't offered the prompt (yet): its menu has the option.
- * - none: a desktop browser that can't install it; nothing to show.
+ * - none: a computer, or nothing to offer; nothing to show.
  */
 export type InstallState = "installed" | "prompt" | "in-app" | "ios" | "manual" | "none";
 
 // Android WebViews mark themselves "wv"; the big apps add their own name to the user agent.
 const inAppBrowser = () => /\bwv\b|FBAN|FBAV|Instagram|WhatsApp|Line\/|Snapchat|TikTok|Twitter/i.test(navigator.userAgent);
-const isPhone = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || isIos();
+const isPhone = () =>
+  /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+  isIos() ||
+  (navigator.maxTouchPoints > 0 && !!window.matchMedia?.("(pointer: coarse)").matches);
 
 const currentState = (): InstallState => {
   if (installed || isStandalone()) return "installed";
+  if (!isPhone()) return "none";
   if (deferred) return "prompt";
   if (inAppBrowser()) return "in-app";
   if (isIos()) return "ios";
-  return isPhone() ? "manual" : "none";
+  return "manual";
 };
 
 export const useInstallState = () =>

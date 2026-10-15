@@ -73,9 +73,14 @@ describe("installing the app", () => {
     expect(renderHook(() => install.useInstallState()).result.current).toBe("ios");
   });
 
-  it("shows nothing on a desktop browser that can't install, and nothing once installed", async () => {
+  it("shows nothing on a computer, even when its browser offers to install, and nothing once installed", async () => {
     const install = await load(DESKTOP);
-    expect(renderHook(() => install.useInstallState()).result.current).toBe("none");
+    const { result } = renderHook(() => install.useInstallState());
+    expect(result.current).toBe("none");
+    act(() => {
+      offerInstall("accepted");
+    });
+    expect(result.current).toBe("none");
 
     window.matchMedia = vi.fn().mockReturnValue({ matches: true }) as unknown as typeof window.matchMedia;
     expect(renderHook(() => install.useInstallState()).result.current).toBe("installed");

@@ -52,18 +52,23 @@ const HowToInstall = ({ state }: { state: Exclude<InstallState, "installed" | "n
   );
 };
 
-const DISMISSED_KEY = "op_install_prompt_dismissed";
+// Dismissing the banner hides it for a week, not for good: the Profile card always offers it.
+const DISMISSED_KEY = "op_install_prompt_dismissed_at";
+const SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 const wasDismissed = () => {
   try {
-    return localStorage.getItem(DISMISSED_KEY) === "1";
+    const at = Number(localStorage.getItem(DISMISSED_KEY));
+    return at > 0 && Date.now() - at < SNOOZE_MS;
   } catch {
     return false;
   }
 };
 
 /**
- * For the Predict page: offers installing the app until it's installed or dismissed, then the
- * notifications nudge. On iPhone installing comes first anyway: notifications need it.
+ * For the Predict page, on phones: offers installing the app until it's installed (or for a week
+ * after it's dismissed), then the notifications nudge. On iPhone installing comes first anyway:
+ * notifications need it. If the player cancels the browser's install dialog, the browser won't
+ * offer it again for a while, so the banner falls back to where the menu option is.
  */
 export const AppPrompt = () => {
   const state = useInstallState();
@@ -74,7 +79,7 @@ export const AppPrompt = () => {
   const dismiss = () => {
     setDismissed(true);
     try {
-      localStorage.setItem(DISMISSED_KEY, "1");
+      localStorage.setItem(DISMISSED_KEY, String(Date.now()));
     } catch {
       // Storage unavailable: it just shows again next visit.
     }
