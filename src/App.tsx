@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-route
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import UpdateAvailable from "@/components/UpdateAvailable";
+import BiometricOffer from "@/components/BiometricOffer";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider, useApp } from "@/context/AppContext";
 import Login from "./pages/Login";
@@ -67,6 +68,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <UpdateAvailable />
+        <BiometricOffer />
         <BrowserRouter>
           {/* Inside the router: a message toast's "Open" navigates to the chat. */}
           <ChatProvider>

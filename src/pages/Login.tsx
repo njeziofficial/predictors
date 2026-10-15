@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { useApp } from "@/context/AppContext";
-import { api, type LoginMethod } from "@/lib/api";
+import { api, type AuthResponse, type LoginMethod } from "@/lib/api";
+import BiometricSignIn from "@/components/BiometricSignIn";
+import { offerBiometricsNextScreen } from "@/lib/passkeys";
 import { POINTS } from "@/lib/constants";
 import { toast } from "sonner";
 import { Target, Zap, TrendingUp, Mail, MessageCircle, Lock, Loader2, AlertCircle, ArrowRight } from "lucide-react";
@@ -56,7 +58,7 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { login } = useApp();
+  const { currentUser, login } = useApp();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: registration } = useQuery({
@@ -100,26 +102,43 @@ const Login = () => {
       } catch {
         // Storage can be unavailable (private mode); the switch just won't be remembered.
       }
-      login(res.token, {
-        id: res.userId,
-        name: res.name,
-        email: res.email,
-        role: res.role,
-        mustResetPassword: res.mustResetPassword,
-        isSystemUser: res.isSystemUser,
-      });
-      toast.success(`Welcome, ${res.name}!`);
-      if (res.mustResetPassword) {
-        navigate("/reset-password-required");
-      } else {
-        navigate(res.role === "admin" ? "/choose" : "/predict");
-      }
+      // Signed in with a password: offer fingerprint/face for next time (BiometricOffer).
+      offerBiometricsNextScreen();
+      enter(res);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed. Please try again.");
     } finally {
       setLoading(false);
     }
   };
+
+  const enter = (res: AuthResponse) => {
+    login(res.token, {
+      id: res.userId,
+      name: res.name,
+      email: res.email,
+      role: res.role,
+      mustResetPassword: res.mustResetPassword,
+      isSystemUser: res.isSystemUser,
+    });
+    toast.success(`Welcome, ${res.name}!`);
+    if (res.mustResetPassword) {
+      navigate("/reset-password-required");
+    } else {
+      navigate(res.role === "admin" ? "/choose" : "/predict");
+    }
+  };
+
+  // Already signed in: straight into the app. The installed app always opens on this page, so
+  // without this a player who closed it was shown the sign-in form though still signed in.
+  if (currentUser) {
+    const home = currentUser.mustResetPassword
+      ? "/reset-password-required"
+      : currentUser.role === "admin"
+        ? "/choose"
+        : "/predict";
+    return <Navigate to={home} replace />;
+  }
 
   return (
     <div className="relative min-h-screen overflow-clip bg-background">
@@ -293,6 +312,8 @@ const Login = () => {
                 )}
               </Button>
             </form>
+
+            <BiometricSignIn onSignedIn={enter} onError={setError} />
 
             {registration?.open !== false && (
               <p className="mt-6 text-center text-xs text-muted-foreground">

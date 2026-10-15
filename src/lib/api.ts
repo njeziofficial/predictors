@@ -1,5 +1,6 @@
 import { clearAuth, getToken, saveAuth, tokenExpiresSoon } from "./auth";
 import { noteLiveBundle } from "./appVersion";
+import type { CreationOptionsJson, RequestOptionsJson } from "./passkeys";
 import type { PredictionRules } from "./predictionRules";
 
 const BASE_URL =
@@ -365,6 +366,16 @@ export interface InboxDto {
   total: number;
   page: number;
   pageSize: number;
+}
+
+// A passkey on the user's account: one of their devices that can sign them in.
+export interface PasskeyDto {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  // base64url; matches the device's own id for it, so the app can tell which one it's running on.
+  credentialId: string;
 }
 
 export interface InboxQuery {
@@ -862,6 +873,21 @@ export const api = {
       request<PasswordTokenDto>("/api/auth/password-token", { method: "POST", body: JSON.stringify({ token }) }),
     setPassword: (token: string, newPassword: string) =>
       request<void>("/api/auth/set-password", { method: "POST", body: JSON.stringify({ token, newPassword }) }),
+    // Signing in with fingerprint or face: what the device should sign, then its signature.
+    passkeyOptions: () =>
+      request<{ flowId: string; options: RequestOptionsJson }>("/api/auth/passkey/options", { method: "POST" }),
+    passkeyLogin: (flowId: string, response: unknown) =>
+      request<AuthResponse>("/api/auth/passkey", { method: "POST", body: JSON.stringify({ flowId, response }) }),
+  },
+
+  // The signed-in user's passkeys (signing in with fingerprint or face), in Profile.
+  passkeys: {
+    list: () => request<PasskeyDto[]>("/api/passkeys"),
+    registrationOptions: () =>
+      request<{ flowId: string; options: CreationOptionsJson }>("/api/passkeys/register/options", { method: "POST" }),
+    register: (flowId: string, name: string, response: unknown) =>
+      request<PasskeyDto>("/api/passkeys/register", { method: "POST", body: JSON.stringify({ flowId, name, response }) }),
+    remove: (id: string) => request<void>(`/api/passkeys/${encodeURIComponent(id)}`, { method: "DELETE" }),
   },
 
   // In-app notifications: reminders and admin notifications, kept for the next visit.
@@ -1099,6 +1125,15 @@ export const api = {
         request<WakeConfigDto>("/api/edge/wake-config", {
           method: "PUT",
           body: JSON.stringify({ mode, retryCount }),
+        }),
+    },
+    // Whether a password reset also removes the account's passkeys (system admin only).
+    passkeySettings: {
+      get: () => request<{ removeOnPasswordReset: boolean }>("/api/admin/passkey-settings"),
+      set: (removeOnPasswordReset: boolean) =>
+        request<{ removeOnPasswordReset: boolean }>("/api/admin/passkey-settings", {
+          method: "PUT",
+          body: JSON.stringify({ removeOnPasswordReset }),
         }),
     },
     auditLogSettings: {

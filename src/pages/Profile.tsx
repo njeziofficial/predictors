@@ -15,6 +15,7 @@ import NavBar from "@/components/NavBar";
 import AdminLayout from "@/components/AdminLayout";
 import { NotificationsCard } from "@/components/PushNotifications";
 import { InstallCard } from "@/components/InstallApp";
+import { BiometricsCard } from "@/components/BiometricsCard";
 import { getArea } from "@/lib/permissions";
 
 const ProfileBody = ({ profile }: { profile: UserProfileDto }) => {
@@ -124,6 +125,7 @@ const ProfileBody = ({ profile }: { profile: UserProfileDto }) => {
 
       <InstallCard />
       <NotificationsCard />
+      <BiometricsCard />
 
       {profile.role === "admin" ? (
         <div className="rounded-xl border border-border bg-card p-4 space-y-2">
