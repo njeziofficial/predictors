@@ -21,6 +21,7 @@ import AdminParticipation from "./pages/AdminParticipation";
 import AdminMarking from "./pages/AdminMarking";
 import AdminScraperHealth from "./pages/AdminScraperHealth";
 import Profile from "./pages/Profile";
+import Notifications from "./pages/Notifications";
 import ResetPasswordRequired from "./pages/ResetPasswordRequired";
 import NotFound from "./pages/NotFound";
 import ChooseDestination from "./pages/ChooseDestination";
@@ -93,6 +94,7 @@ const App = () => (
               <Route path="/admin/notifications" element={<RequireFreshPassword><AdminNotifications /></RequireFreshPassword>} />
               <Route path="/admin/scraper" element={<RequireFreshPassword><AdminScraperHealth /></RequireFreshPassword>} />
               <Route path="/profile" element={<RequireFreshPassword><Profile /></RequireFreshPassword>} />
+              <Route path="/notifications" element={<RequireFreshPassword><Notifications /></RequireFreshPassword>} />
               <Route path="/messages/:conversationId?" element={<RequireFreshPassword><Messages /></RequireFreshPassword>} />
               <Route path="/admin/messages/:conversationId?" element={<RequireFreshPassword><AdminMessages /></RequireFreshPassword>} />
               <Route path="*" element={<NotFound />} />

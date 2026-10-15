@@ -50,12 +50,38 @@ const keyBytes = (base64url: string) => {
 const sameKey = (a: ArrayBuffer | null | undefined, b: Uint8Array) =>
   !!a && a.byteLength === b.byteLength && new Uint8Array(a).every((x, i) => x === b[i]);
 
+// Set when the player switches notifications off here, so signing in again doesn't quietly turn
+// them back on. Signing out doesn't set it: the next sign-in on this phone resubscribes.
+const TURNED_OFF_KEY = "op_push_off";
+const turnedOff = () => {
+  try {
+    return localStorage.getItem(TURNED_OFF_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+const setTurnedOff = (off: boolean) => {
+  try {
+    if (off) localStorage.setItem(TURNED_OFF_KEY, "1");
+    else localStorage.removeItem(TURNED_OFF_KEY);
+  } catch {
+    // Storage unavailable: at worst a sign-in turns them back on.
+  }
+};
+
 /** Asks for permission (call it from a tap), subscribes this browser and saves it for the signed-in user. */
 export async function enablePush(): Promise<PushState> {
   if (!supported()) return getPushState();
   const permission = await Notification.requestPermission();
   if (permission !== "granted") return permission === "denied" ? "denied" : "off";
+  setTurnedOff(false);
+  await subscribeThisBrowser();
+  return "on";
+}
 
+// Subscribes with the server's current key and saves it for the signed-in user. Needs permission
+// already granted; then it needs no tap, so a sign-in can call it too.
+async function subscribeThisBrowser(): Promise<void> {
   const registration = await navigator.serviceWorker.register("/sw.js");
   await navigator.serviceWorker.ready;
   const serverKey = keyBytes((await api.push.publicKey()).publicKey);
@@ -68,11 +94,11 @@ export async function enablePush(): Promise<PushState> {
   }
   subscription ??= await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: serverKey });
   await api.push.subscribe(subscription.toJSON());
-  return "on";
 }
 
 /** Stops notifications in this browser, for the signed-in user. */
 export async function disablePush(): Promise<PushState> {
+  setTurnedOff(true);
   const subscription = supported() ? await currentSubscription() : null;
   if (subscription) {
     await api.push.unsubscribe(subscription.endpoint).catch(() => {});
@@ -83,28 +109,37 @@ export async function disablePush(): Promise<PushState> {
 
 /**
  * Re-saves this browser's subscription for whoever is signed in, so it follows the account (and
- * comes back if the server dropped it). Quiet: does nothing unless notifications are already on.
+ * comes back if the server dropped it). After a sign-out, which unsubscribes the browser, it
+ * subscribes again, as long as the phone still allows notifications and the player didn't switch
+ * them off here. Quiet: never asks for permission.
  */
 export async function syncPushSubscription(): Promise<void> {
   try {
     if (!supported() || Notification.permission !== "granted") return;
     const subscription = await currentSubscription();
     if (subscription) await api.push.subscribe(subscription.toJSON());
+    else if (!turnedOff()) await subscribeThisBrowser();
   } catch {
     // Offline or the server is waking: the next app start tries again.
   }
 }
 
+// Chat pushes are tagged "chat-<conversation>" (the backend's ChatPushNotifier).
+const isChat = (n: Notification) => n.tag.startsWith("chat-");
+
 /**
- * Closes the notifications this app has shown on the device, so the phone's notification panel
- * and the launcher's count clear once the player is in the app, where the same notifications are
- * listed (NotificationBell).
+ * Closes notifications this app has shown on the device: chat messages (`"chats"`), which the
+ * player sees as soon as they're in the app, or everything else (`"inbox"`) once nothing is
+ * unread in the app's own list (NotificationBell). Until then those stay, and so does the count
+ * Android's launcher shows on the app icon, which is the number of notifications showing.
  */
-export async function clearShownNotifications(): Promise<void> {
+export async function clearShownNotifications(which: "chats" | "inbox"): Promise<void> {
   try {
     if (!("serviceWorker" in navigator)) return;
     const registration = await navigator.serviceWorker.getRegistration();
-    (await registration?.getNotifications())?.forEach((n) => n.close());
+    (await registration?.getNotifications())
+      ?.filter((n) => (which === "chats" ? isChat(n) : !isChat(n)))
+      .forEach((n) => n.close());
   } catch {
     // Nothing shown, or not supported here.
   }

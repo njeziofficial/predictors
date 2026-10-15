@@ -357,8 +357,20 @@ export interface InboxItemDto {
 }
 
 export interface InboxDto {
+  // All unread, whatever the search.
   unread: number;
   items: InboxItemDto[];
+  // How many match the search/filter, across all pages.
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface InboxQuery {
+  q?: string;
+  unreadOnly?: boolean;
+  page?: number;
+  pageSize?: number;
 }
 
 export interface NotificationPlayerDto {
@@ -695,7 +707,11 @@ export interface ReadReceiptDto {
 
 // ── Core request helper ───────────────────────────────────────────────────────
 
-type RefreshOutcome = "ok" | "expired" | "disabled";
+// unavailable: the server couldn't answer (asleep, waking, offline). That says nothing about the
+// session, so the player stays signed in and the next request tries again.
+type RefreshOutcome = "ok" | "expired" | "disabled" | "unavailable";
+
+const UNAVAILABLE_MESSAGE = "Can't reach the server right now. Try again in a moment.";
 
 let refreshInFlight: Promise<RefreshOutcome> | null = null;
 
@@ -707,7 +723,10 @@ export function refreshSession(): Promise<RefreshOutcome> {
     try {
       const res = await fetch(`${BASE_URL}/api/auth/refresh`, { method: "POST" });
       if (res.status === 403) return "disabled";
-      if (!res.ok) return "expired";
+      // Only the server saying so ends the session. A 502/503/504 is the backend waking up
+      // (Render's free tier sleeps), which used to sign players out whenever they reopened the app.
+      if (res.status === 401) return "expired";
+      if (!res.ok) return "unavailable";
       const auth = (await res.json()) as AuthResponse;
       // The refresh response carries the user's current role/flags, so a change an admin made
       // (e.g. a promotion) shows up here without a fresh login.
@@ -722,7 +741,7 @@ export function refreshSession(): Promise<RefreshOutcome> {
       return "ok";
     } catch {
       // Network failure: not proof the session is gone, so don't sign the user out over it.
-      return "ok";
+      return "unavailable";
     } finally {
       refreshInFlight = null;
     }
@@ -736,13 +755,15 @@ export async function getFreshToken(): Promise<string> {
   const current = getToken();
   if (current && !tokenExpiresSoon(current)) return current;
   const outcome = await refreshSession();
+  // The hub retries on its own; keep the session for when the server is back.
+  if (outcome === "unavailable") throw new Error(UNAVAILABLE_MESSAGE);
   if (outcome !== "ok") endSession(outcome);
   const token = getToken();
   if (!token) endSession("expired");
   return token;
 }
 
-function endSession(outcome: Exclude<RefreshOutcome, "ok">): never {
+function endSession(outcome: "expired" | "disabled"): never {
   clearAuth();
   window.location.replace(outcome === "disabled" ? "/?disabled=1" : "/");
   throw new Error(
@@ -761,6 +782,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const current = getToken();
     if (current && tokenExpiresSoon(current)) {
       const outcome = await refreshSession();
+      if (outcome === "unavailable") throw new Error(UNAVAILABLE_MESSAGE);
       if (outcome !== "ok") endSession(outcome);
     }
   }
@@ -782,6 +804,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (res.status === 401 && !isAuthEndpoint) {
     const outcome = await refreshSession();
+    if (outcome === "unavailable") throw new Error(UNAVAILABLE_MESSAGE);
     if (outcome !== "ok") endSession(outcome);
     res = await send();
     if (res.status === 401) endSession("expired");
@@ -838,9 +861,21 @@ export const api = {
 
   // In-app notifications: reminders and admin notifications, kept for the next visit.
   notifications: {
-    list: () => request<InboxDto>("/api/notifications"),
+    list: (query: InboxQuery = {}) => {
+      const params = new URLSearchParams();
+      if (query.q?.trim()) params.set("q", query.q.trim());
+      if (query.unreadOnly) params.set("unreadOnly", "true");
+      if (query.page) params.set("page", String(query.page));
+      if (query.pageSize) params.set("pageSize", String(query.pageSize));
+      const qs = params.toString();
+      return request<InboxDto>(`/api/notifications${qs ? `?${qs}` : ""}`);
+    },
     markRead: (id: string) => request<void>(`/api/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
     markAllRead: () => request<void>("/api/notifications/read-all", { method: "POST" }),
+    remove: (id: string) => request<void>(`/api/notifications/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    removeMany: (ids: string[]) =>
+      request<{ deleted: number }>("/api/notifications/delete", { method: "POST", body: JSON.stringify({ ids }) }),
+    removeRead: () => request<{ deleted: number }>("/api/notifications/delete-read", { method: "POST" }),
   },
 
   // Push notifications for this browser (see lib/push.ts).
@@ -978,7 +1013,8 @@ export const api = {
           body: JSON.stringify(target),
         }),
       send: (notification: SendNotificationPayload) =>
-        request<{ targeted: number; reached: number; emailed?: number }>("/api/admin/notifications", {
+        // targeted: players with push on (reached of them got it); inApp: everyone it went to in the app.
+        request<{ targeted: number; reached: number; emailed?: number; inApp?: number }>("/api/admin/notifications", {
           method: "POST",
           body: JSON.stringify(notification),
         }),

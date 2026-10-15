@@ -40,13 +40,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (currentUser?.id) void syncPushSubscription();
   }, [currentUser?.id]);
 
-  // In the app, its notifications on the phone have done their job: clear them (and the
-  // launcher's count), and refresh the in-app list they're kept in.
+  // Back in the app: chat notifications on the phone have done their job, and the in-app list
+  // is refreshed. The other notifications (and the launcher's count) stay until they're read
+  // in the app; NotificationBell clears them then.
   useEffect(() => {
     if (!currentUser?.id) return;
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
-      void clearShownNotifications();
+      void clearShownNotifications("chats");
       queryClient.invalidateQueries({ queryKey: ["inbox"] });
     };
     onVisible();

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
+import { sentSummary } from "@/lib/notificationCount";
 import { BellRing, Loader2, Mail, Search, Send, ShieldAlert, Users } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { BrandMark } from "@/components/Brand";
@@ -129,10 +130,8 @@ const AdminNotifications = () => {
 
   const { mutate: send, isPending: sending } = useMutation({
     mutationFn: () => api.admin.notifications.send({ ...target, title: titleText, body: bodyText, url }),
-    onSuccess: ({ reached, targeted, emailed }) => {
-      toast.success(
-        `Sent. ${reached} of ${targeted} ${targeted === 1 ? "player" : "players"} got it${emailed ? `, and ${emailed} by email` : ""}.`,
-      );
+    onSuccess: (result) => {
+      toast.success(sentSummary(result));
       setTitle("");
       setBody("");
       setImportant(false);
@@ -408,7 +407,8 @@ const AdminNotifications = () => {
                   </div>
                   <p className="text-xs text-muted-foreground">{b.body}</p>
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    {audienceText(b)} · {b.reached} of {b.targeted} reached
+                    {audienceText(b)} ·{" "}
+                    {b.targeted > 0 ? `${b.reached} of ${b.targeted} phones reached` : "in the app only, no phones"}
                     {b.emailed ? ` · ${b.emailed} emailed` : ""} · by {b.sentByName}
                     {b.important && <span className="ml-1 text-destructive">· Important</span>}
                   </p>
