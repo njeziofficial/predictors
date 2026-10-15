@@ -1,4 +1,5 @@
 import { clearAuth, getToken, saveAuth, tokenExpiresSoon } from "./auth";
+import { noteLiveBundle } from "./appVersion";
 import type { PredictionRules } from "./predictionRules";
 
 const BASE_URL =
@@ -722,6 +723,7 @@ export function refreshSession(): Promise<RefreshOutcome> {
   refreshInFlight ??= (async (): Promise<RefreshOutcome> => {
     try {
       const res = await fetch(`${BASE_URL}/api/auth/refresh`, { method: "POST" });
+      noteLiveBundle(res.headers);
       if (res.status === 403) return "disabled";
       // Only the server saying so ends the session. A 502/503/504 is the backend waking up
       // (Render's free tier sleeps), which used to sign players out whenever they reopened the app.
@@ -787,9 +789,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     }
   }
 
-  const send = () => {
+  const send = async () => {
     const token = getToken();
-    return fetch(`${BASE_URL}${path}`, {
+    const res = await fetch(`${BASE_URL}${path}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",
@@ -797,6 +799,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
         ...(options.headers ?? {}),
       },
     });
+    // The Worker says which build is live; a newer one shows the "new version" prompt.
+    noteLiveBundle(res.headers);
+    return res;
   };
 
   const token = getToken();

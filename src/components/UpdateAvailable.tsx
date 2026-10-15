@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { newerBundle } from "@/lib/appVersion";
+import { NEW_VERSION_EVENT, newerBundle } from "@/lib/appVersion";
 
-// Checked when the player comes back to the app, and every half hour while it's in front, but at
-// most every five minutes: an installed app can sit open in the background for days.
+// While the app is open, every API answer says which build is live (the Worker adds it; see
+// noteLiveBundle), so a deploy is noticed with no extra requests. One direct check runs when the
+// app opens and when the player comes back to it (at most every five minutes), which also covers
+// the sign-in pages, where the app makes no API calls.
 const MIN_GAP_MS = 5 * 60 * 1000;
-const POLL_MS = 30 * 60 * 1000;
+// A phone coming back from the background often has no network for a few seconds, so a check
+// that couldn't get an answer is tried again shortly.
+const RETRY_MS = 15 * 1000;
 
 /**
  * "A new version is available": shown when a newer build has been deployed since this page
@@ -16,26 +20,50 @@ const POLL_MS = 30 * 60 * 1000;
 const UpdateAvailable = () => {
   const [available, setAvailable] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<string | null>(null);
-  const lastCheck = useRef(0);
+  // When the last check got an answer; a check that couldn't doesn't count.
+  const lastAnswer = useRef(0);
+  const checking = useRef(false);
 
   useEffect(() => {
+    let retry: number | undefined;
+
     const check = async () => {
-      if (document.visibilityState !== "visible" || Date.now() - lastCheck.current < MIN_GAP_MS) return;
-      lastCheck.current = Date.now();
-      const newer = await newerBundle();
-      if (newer) setAvailable(newer);
+      if (document.visibilityState !== "visible" || checking.current) return;
+      if (Date.now() - lastAnswer.current < MIN_GAP_MS) return;
+      checking.current = true;
+      window.clearTimeout(retry);
+      try {
+        const newer = await newerBundle();
+        if (newer === undefined) {
+          retry = window.setTimeout(() => void check(), RETRY_MS);
+          return;
+        }
+        lastAnswer.current = Date.now();
+        if (newer) setAvailable(newer);
+      } finally {
+        checking.current = false;
+      }
     };
 
     const onVisible = () => void check();
+    const onNewVersion = (e: Event) => {
+      const live = (e as CustomEvent<string>).detail;
+      if (live) setAvailable(live);
+    };
+    // Also on opening: a phone may show a page it kept from before the update.
+    onVisible();
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
     window.addEventListener("online", onVisible);
-    const timer = window.setInterval(onVisible, POLL_MS);
+    window.addEventListener("pageshow", onVisible);
+    window.addEventListener(NEW_VERSION_EVENT, onNewVersion);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
       window.removeEventListener("online", onVisible);
-      window.clearInterval(timer);
+      window.removeEventListener("pageshow", onVisible);
+      window.removeEventListener(NEW_VERSION_EVENT, onNewVersion);
+      window.clearTimeout(retry);
     };
   }, []);
 

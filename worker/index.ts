@@ -16,6 +16,7 @@ import {
   type WakeConfig,
   type WakeSchedule,
 } from "./wake";
+import { withLiveBundle } from "./version";
 
 // Mirrors nginx.conf: serve the SPA from static assets and forward /api/* to the backend,
 // so the browser only ever talks to one origin (no CORS, VITE_API_URL stays "").
@@ -251,8 +252,10 @@ export default {
           { status: 503 },
         );
       }
-      if (url.pathname === WAKE_CONFIG_PATH) return handleWakeConfig(request, env, ctx);
-      return proxyToBackend(request, env, url, ctx);
+      const res =
+        url.pathname === WAKE_CONFIG_PATH ? await handleWakeConfig(request, env, ctx) : await proxyToBackend(request, env, url, ctx);
+      // Every answer says which build is live, so open apps hear of a deploy (src/lib/appVersion.ts).
+      return withLiveBundle(res, env.ASSETS, url.origin);
     }
 
     return env.ASSETS.fetch(request);
