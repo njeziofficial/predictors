@@ -30,6 +30,8 @@ import AdminAccessControl from "./pages/AdminAccessControl";
 import Messages from "./pages/Messages";
 import AdminMessages from "./pages/AdminMessages";
 import AdminNotifications from "./pages/AdminNotifications";
+import Wallet from "./pages/Wallet";
+import AdminWallet from "./pages/AdminWallet";
 import ForgotPassword from "./pages/ForgotPassword";
 import SetPassword from "./pages/SetPassword";
 import { ChatProvider } from "@/context/ChatContext";
@@ -97,6 +99,8 @@ const App = () => (
               <Route path="/admin/scraper" element={<RequireFreshPassword><AdminScraperHealth /></RequireFreshPassword>} />
               <Route path="/profile" element={<RequireFreshPassword><Profile /></RequireFreshPassword>} />
               <Route path="/notifications" element={<RequireFreshPassword><Notifications /></RequireFreshPassword>} />
+              <Route path="/wallet" element={<RequireFreshPassword><Wallet /></RequireFreshPassword>} />
+              <Route path="/admin/wallet" element={<RequireFreshPassword><AdminWallet /></RequireFreshPassword>} />
               <Route path="/messages/:conversationId?" element={<RequireFreshPassword><Messages /></RequireFreshPassword>} />
               <Route path="/admin/messages/:conversationId?" element={<RequireFreshPassword><AdminMessages /></RequireFreshPassword>} />
               <Route path="*" element={<NotFound />} />

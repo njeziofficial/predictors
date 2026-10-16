@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ClipboardList, Trophy, Radio, Clock, User, LogOut, LayoutDashboard, MessageCircle } from "lucide-react";
+import { ClipboardList, Trophy, Radio, Clock, User, LogOut, LayoutDashboard, MessageCircle, Wallet } from "lucide-react";
 import { BrandLogo } from "@/components/Brand";
 import NotificationBell from "@/components/NotificationBell";
 import CompetitionSwitcher from "@/components/CompetitionSwitcher";
@@ -15,6 +15,7 @@ const navItems = [
   { path: "/status", label: "Live", icon: Radio },
   { path: "/dashboard", label: "History", icon: Clock },
   { path: "/messages", label: "Messages", icon: MessageCircle },
+  { path: "/wallet", label: "Wallet", icon: Wallet },
   { path: "/profile", label: "Profile", icon: User },
 ];
 

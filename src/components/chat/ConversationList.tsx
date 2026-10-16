@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Ban, Megaphone, MessageCirclePlus, Search, SquarePen } from "lucide-react";
 import type { ConversationDto } from "@/lib/api";
-import { formatListTime } from "@/lib/chat";
+import { formatListTime, messagePreview } from "@/lib/chat";
 import { useChat } from "@/context/ChatContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -23,7 +23,7 @@ const Preview = ({ conversation, meId }: { conversation: ConversationDto; meId: 
     <>
       {last.isAnnouncement && <Megaphone className="mr-1 inline h-3 w-3 -translate-y-px text-primary" />}
       {last.senderId === meId && <span className="text-muted-foreground/80">You: </span>}
-      {last.body}
+      {messagePreview(last)}
     </>
   );
 };

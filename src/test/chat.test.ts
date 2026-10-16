@@ -8,6 +8,7 @@ import {
   flattenMessages,
   formatListTime,
   initials,
+  messagePreview,
   splitLinks,
   totalUnread,
   upsertMessage,
@@ -158,5 +159,16 @@ describe("formatting", () => {
   it("totals unread", () => {
     expect(totalUnread([conv({ unreadCount: 2 }), conv({ id: "c2", unreadCount: 3 })])).toBe(5);
     expect(totalUnread(undefined)).toBe(0);
+  });
+});
+
+describe("messagePreview", () => {
+  const image = { url: "https://r2.test/x.jpg?signed", width: 800, height: 600 };
+
+  it("shows text as it is, and a photo as a photo with its caption", () => {
+    expect(messagePreview(msg({ body: "hi" }))).toBe("hi");
+    expect(messagePreview(msg({ body: "", image }))).toBe("📷 Photo");
+    expect(messagePreview(msg({ body: "Look", image }))).toBe("📷 Look");
+    expect(messagePreview(msg({ body: null, image: null }))).toBe("");
   });
 });

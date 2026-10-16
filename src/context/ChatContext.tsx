@@ -11,6 +11,7 @@ import {
   applyPresence,
   applyReadReceipt,
   chatKeys,
+  messagePreview,
   totalUnread,
   upsertMessage,
   type MessagePages,
@@ -122,7 +123,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       }
       // On the messages screen the inbox already shows it; elsewhere, pop a toast.
       if (!/\/messages(\/|$)/.test(pathRef.current)) {
-        const preview = message.body ?? "";
+        const preview = messagePreview(message);
         toast(message.isAnnouncement ? `📣 ${message.senderName}` : message.senderName, {
           id: `chat-${message.conversationId}`,
           description: preview.length > 90 ? `${preview.slice(0, 90)}…` : preview,

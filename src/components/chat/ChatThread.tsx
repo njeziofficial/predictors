@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type DragEvent,
+  type KeyboardEvent,
+} from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -9,18 +19,22 @@ import {
   CheckCheck,
   Clock,
   Copy,
+  ExternalLink,
+  ImagePlus,
   Loader2,
   Megaphone,
   MoreHorizontal,
   SendHorizontal,
   Trash2,
   WifiOff,
+  X,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useApp } from "@/context/AppContext";
 import { useChat } from "@/context/ChatContext";
-import { api, type ConversationDto } from "@/lib/api";
+import { api, type ChatImageDto, type ConversationDto } from "@/lib/api";
+import { ChatImageError, prepareChatImage, type PreparedImage } from "@/lib/chatImage";
 import {
   applyMessageToConversations,
   applyReadReceipt,
@@ -53,14 +67,45 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import ChatAvatar, { AdminBadge } from "./ChatAvatar";
 
 // Unsent text per conversation, kept while you hop between chats (cleared on reload).
 const drafts = new Map<string, string>();
+// Images still on their way, by clientId, so a failed send can be retried.
+const pendingImages = new Map<string, PreparedImage>();
 
 const NEAR_BOTTOM_PX = 120;
+// The largest an image shows in the thread; tap it for full size.
+const IMAGE_MAX_WIDTH = 280;
+const IMAGE_MAX_HEIGHT = 320;
+
+const ChatImage = ({
+  image,
+  onOpen,
+  onBroken,
+}: {
+  image: ChatImageDto;
+  onOpen: () => void;
+  onBroken: () => void;
+}) => {
+  const ratio = image.width && image.height ? image.width / image.height : 4 / 3;
+  // Room is kept for the image from its size, so the thread doesn't jump as it loads.
+  const width = Math.round(Math.min(IMAGE_MAX_WIDTH, IMAGE_MAX_HEIGHT * ratio));
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label="Open image"
+      className="block max-w-full overflow-hidden rounded-xl bg-black/20"
+      style={{ width, aspectRatio: String(ratio) }}
+    >
+      <img src={image.url} alt="Image" loading="lazy" decoding="async" onError={onBroken} className="h-full w-full object-cover" />
+    </button>
+  );
+};
 
 const MessageText = ({ text }: { text: string }) => (
   <>
@@ -101,6 +146,8 @@ const MessageBubble = ({
   onDelete,
   onRetry,
   onDiscard,
+  onOpenImage,
+  onImageBroken,
 }: {
   message: LocalMessage;
   mine: boolean;
@@ -110,10 +157,15 @@ const MessageBubble = ({
   onDelete: () => void;
   onRetry: () => void;
   onDiscard: () => void;
+  onOpenImage: (image: ChatImageDto) => void;
+  onImageBroken: () => void;
 }) => {
   const time = format(new Date(message.createdAt), "HH:mm");
   const deleted = !!message.deletedAt;
   const pending = !!message.status;
+  const image = !deleted ? message.image : null;
+  // With no caption, the time sits on the image itself.
+  const timeOnImage = !!image && !message.body;
 
   const copy = () => {
     navigator.clipboard?.writeText(message.body ?? "").then(
@@ -131,9 +183,16 @@ const MessageBubble = ({
         <MoreHorizontal className="h-4 w-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align={mine ? "end" : "start"} className="w-40">
-        <DropdownMenuItem onClick={copy}>
-          <Copy className="mr-2 h-3.5 w-3.5" /> Copy text
-        </DropdownMenuItem>
+        {message.body && (
+          <DropdownMenuItem onClick={copy}>
+            <Copy className="mr-2 h-3.5 w-3.5" /> Copy text
+          </DropdownMenuItem>
+        )}
+        {image && (
+          <DropdownMenuItem onClick={() => onOpenImage(image)}>
+            <ExternalLink className="mr-2 h-3.5 w-3.5" /> View image
+          </DropdownMenuItem>
+        )}
         {mine && (
           <>
             <DropdownMenuSeparator />
@@ -177,7 +236,8 @@ const MessageBubble = ({
       <div className={cn("group flex items-center gap-1", mine ? "flex-row-reverse" : "flex-row")}>
         <div
           className={cn(
-            "relative max-w-[80%] px-3 py-1.5 shadow-sm sm:max-w-[65%]",
+            "relative max-w-[80%] shadow-sm sm:max-w-[65%]",
+            image ? "p-1" : "px-3 py-1.5",
             "rounded-2xl",
             mine
               ? cn(
@@ -195,22 +255,26 @@ const MessageBubble = ({
             message.status === "failed" && "ring-1 ring-destructive/60",
           )}
         >
+          {image && <ChatImage image={image} onOpen={() => onOpenImage(image)} onBroken={onImageBroken} />}
           {deleted ? (
             <p className="flex items-center gap-1.5 text-sm italic">
               <Ban className="h-3.5 w-3.5" /> {mine ? "You deleted this message" : "This message was deleted"}
             </p>
           ) : (
-            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-              <MessageText text={message.body ?? ""} />
-              {/* Reserves room so the time never overlaps the last line of text. */}
-              <span className="inline-block w-12" aria-hidden />
-            </p>
+            message.body && (
+              <p className={cn("whitespace-pre-wrap break-words text-sm leading-relaxed", image && "px-2 pb-1 pt-1.5")}>
+                <MessageText text={message.body} />
+                {/* Reserves room so the time never overlaps the last line of text. */}
+                <span className="inline-block w-12" aria-hidden />
+              </p>
+            )
           )}
           <span
             className={cn(
               "absolute bottom-1 right-2.5 flex items-center gap-0.5 text-[10px] tabular-nums",
               mine && !deleted ? "text-primary-foreground/75" : "text-muted-foreground",
               deleted && "static mt-0.5 justify-end",
+              timeOnImage && "bottom-2 right-2 rounded-full bg-black/55 px-1.5 py-0.5 text-white",
             )}
           >
             {time}
@@ -268,6 +332,13 @@ const ChatThread = ({ conversation, onBack }: { conversation: ConversationDto; o
   const [text, setText] = useState(() => drafts.get(conversation.id) ?? "");
   const [toDelete, setToDelete] = useState<LocalMessage | null>(null);
   const [newBelow, setNewBelow] = useState(0);
+  // The image picked to go with the next message, and its on-screen preview.
+  const [attachment, setAttachment] = useState<(PreparedImage & { previewUrl: string }) | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [viewing, setViewing] = useState<ChatImageDto | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Links already refreshed once, so a missing image can't refetch forever.
+  const refreshedRef = useRef(new Set<string>());
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -388,7 +459,8 @@ const ChatThread = ({ conversation, onBack }: { conversation: ConversationDto; o
     if (value.trim()) notifyTyping(conversation.id);
   };
 
-  const deliver = (body: string, clientId: string) => {
+  const deliver = (body: string, clientId: string, image?: PreparedImage) => {
+    const previewUrl = image ? URL.createObjectURL(image.blob) : null;
     const optimistic: LocalMessage = {
       id: `pending:${clientId}`,
       conversationId: conversation.id,
@@ -399,14 +471,29 @@ const ChatThread = ({ conversation, onBack }: { conversation: ConversationDto; o
       clientId,
       createdAt: new Date().toISOString(),
       deletedAt: null,
+      image: image && previewUrl ? { url: previewUrl, width: image.width, height: image.height } : null,
       status: "sending",
     };
     queryClient.setQueryData<MessagePages>(key, (d) => upsertMessage(d, optimistic));
+    if (image) pendingImages.set(clientId, image);
 
-    api.chat
-      .send(conversation.id, body, clientId)
+    (image ? api.chat.sendImage(conversation.id, image, body, clientId) : api.chat.send(conversation.id, body, clientId))
       .then((sent) => {
-        queryClient.setQueryData<MessagePages>(key, (d) => upsertMessage(d, sent));
+        pendingImages.delete(clientId);
+        // Keep showing our own copy until the uploaded one has loaded, so it doesn't flicker.
+        if (previewUrl && sent.image) {
+          const swap = new Image();
+          swap.onload = swap.onerror = () => {
+            queryClient.setQueryData<MessagePages>(key, (d) => upsertMessage(d, sent));
+            URL.revokeObjectURL(previewUrl);
+          };
+          swap.src = sent.image.url;
+          queryClient.setQueryData<MessagePages>(key, (d) =>
+            upsertMessage(d, { ...sent, image: { ...sent.image!, url: previewUrl } }),
+          );
+        } else {
+          queryClient.setQueryData<MessagePages>(key, (d) => upsertMessage(d, sent));
+        }
         // The hub does this too; doing it here keeps the inbox right even while it's reconnecting.
         queryClient.setQueryData(chatKeys.conversations, (list: ConversationDto[] | undefined) => {
           const next = applyMessageToConversations(list, sent, meId, { countAsUnread: false });
@@ -422,11 +509,63 @@ const ChatThread = ({ conversation, onBack }: { conversation: ConversationDto; o
 
   const send = () => {
     const body = text.trim();
-    if (!body || isLoading) return;
-    deliver(body, newClientId());
+    if ((!body && !attachment) || preparing || isLoading) return;
+    deliver(body, newClientId(), attachment ?? undefined);
     updateText("");
+    clearAttachment();
     nearBottomRef.current = true;
     inputRef.current?.focus();
+  };
+
+  const retry = (message: LocalMessage) => {
+    if (!message.clientId) return;
+    const image = pendingImages.get(message.clientId);
+    if (image || message.body) deliver(message.body ?? "", message.clientId, image);
+  };
+
+  // ── Images ──
+  const clearAttachment = () => {
+    setAttachment((current) => {
+      if (current) URL.revokeObjectURL(current.previewUrl);
+      return null;
+    });
+  };
+
+  const attach = async (file: File | undefined) => {
+    if (!file) return;
+    setPreparing(true);
+    try {
+      const prepared = await prepareChatImage(file);
+      clearAttachment();
+      setAttachment({ ...prepared, previewUrl: URL.createObjectURL(prepared.blob) });
+      inputRef.current?.focus();
+    } catch (err) {
+      toast.error(err instanceof ChatImageError ? err.message : "Couldn't add that image.");
+    } finally {
+      setPreparing(false);
+    }
+  };
+
+  // A screenshot or copied image pasted straight into the message box.
+  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const file = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
+    if (!file) return;
+    e.preventDefault();
+    attach(file);
+  };
+
+  const onDrop = (e: DragEvent) => {
+    const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/"));
+    if (!file) return;
+    e.preventDefault();
+    attach(file);
+  };
+
+  // Image links expire after a while: fetch the messages again for fresh ones (once per image).
+  const refreshImage = (message: LocalMessage) => {
+    if (message.status || refreshedRef.current.has(message.id)) return;
+    refreshedRef.current.add(message.id);
+    queryClient.invalidateQueries({ queryKey: key });
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -436,10 +575,13 @@ const ChatThread = ({ conversation, onBack }: { conversation: ConversationDto; o
     }
   };
 
-  const discard = (message: LocalMessage) =>
+  const discard = (message: LocalMessage) => {
+    if (message.clientId) pendingImages.delete(message.clientId);
+    if (message.image?.url.startsWith("blob:")) URL.revokeObjectURL(message.image.url);
     queryClient.setQueryData<MessagePages>(key, (d) =>
       d && { ...d, pages: d.pages.map((p) => ({ ...p, items: p.items.filter((m) => m.id !== message.id) })) },
     );
+  };
 
   const confirmDelete = () => {
     const message = toDelete;
@@ -454,7 +596,7 @@ const ChatThread = ({ conversation, onBack }: { conversation: ConversationDto; o
   const remaining = MAX_MESSAGE_LENGTH - text.length;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-border px-3 py-2.5 sm:px-4">
         <button
@@ -555,8 +697,10 @@ const ChatThread = ({ conversation, onBack }: { conversation: ConversationDto; o
                     groupedWithPrevious={continuesGroup(previous, m) && !startsNewDay(previous, m)}
                     groupedWithNext={!!next && continuesGroup(m, next)}
                     onDelete={() => setToDelete(m)}
-                    onRetry={() => m.body && m.clientId && deliver(m.body, m.clientId)}
+                    onRetry={() => retry(m)}
                     onDiscard={() => discard(m)}
+                    onOpenImage={setViewing}
+                    onImageBroken={() => refreshImage(m)}
                   />
                 </div>
               );
@@ -581,16 +725,61 @@ const ChatThread = ({ conversation, onBack }: { conversation: ConversationDto; o
 
       {/* Composer */}
       <div className="border-t border-border px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-4">
+        {(attachment || preparing) && (
+          <div className="mb-2 flex items-center gap-3">
+            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-border bg-secondary">
+              {attachment ? (
+                <img src={attachment.previewUrl} alt="Image to send" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              {attachment && (
+                <button
+                  type="button"
+                  onClick={() => clearAttachment()}
+                  aria-label="Remove image"
+                  className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">{preparing ? "Preparing image…" : "Add a caption, or just send."}</p>
+          </div>
+        )}
         <div className="flex items-end gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp,image/*"
+            className="hidden"
+            onChange={(e) => {
+              attach(e.target.files?.[0]);
+              // Picking the same file again should still fire.
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={preparing || isLoading}
+            aria-label="Send an image"
+            className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-40"
+          >
+            <ImagePlus className="h-5 w-5" />
+          </button>
           <div className="relative flex-1">
             <textarea
               ref={inputRef}
               value={text}
               onChange={(e) => updateText(e.target.value)}
               onKeyDown={onKeyDown}
+              onPaste={onPaste}
               rows={1}
               maxLength={MAX_MESSAGE_LENGTH}
-              placeholder={`Message ${other.name.split(" ")[0]}…`}
+              placeholder={attachment ? "Add a caption…" : `Message ${other.name.split(" ")[0]}…`}
               aria-label="Message"
               className="block max-h-40 min-h-[42px] w-full resize-none rounded-2xl border border-border bg-background px-4 py-2.5 text-sm leading-relaxed outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/60"
             />
@@ -607,7 +796,7 @@ const ChatThread = ({ conversation, onBack }: { conversation: ConversationDto; o
           </div>
           <button
             onClick={send}
-            disabled={!text.trim() || isLoading}
+            disabled={(!text.trim() && !attachment) || preparing || isLoading}
             aria-label="Send"
             className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition-all hover:brightness-110 active:scale-95 disabled:scale-100 disabled:opacity-40"
           >
@@ -618,6 +807,27 @@ const ChatThread = ({ conversation, onBack }: { conversation: ConversationDto; o
           <kbd className="font-sans">Enter</kbd> to send · <kbd className="font-sans">Shift + Enter</kbd> for a new line
         </p>
       </div>
+
+      <Dialog open={!!viewing} onOpenChange={(open) => !open && setViewing(null)}>
+        <DialogContent className="max-w-[min(95vw,64rem)] border-none bg-transparent p-0 shadow-none">
+          <DialogTitle className="sr-only">Image</DialogTitle>
+          {viewing && (
+            <div className="flex flex-col items-center gap-2">
+              <img src={viewing.url} alt="Image" className="max-h-[85vh] w-auto max-w-full rounded-lg object-contain" />
+              {!viewing.url.startsWith("blob:") && (
+                <a
+                  href={viewing.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1 text-xs text-white hover:bg-black/80"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> Open full size
+                </a>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!toDelete} onOpenChange={(open) => !open && setToDelete(null)}>
         <AlertDialogContent>

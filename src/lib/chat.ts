@@ -171,6 +171,10 @@ export function splitLinks(text: string): TextPart[] {
   return parts;
 }
 
+/** A message in a line, for the inbox and toasts: a photo shows as "📷 Photo" or "📷 caption". */
+export const messagePreview = (message: Pick<ChatMessageDto, "body" | "image">) =>
+  message.image ? (message.body ? `📷 ${message.body}` : "📷 Photo") : (message.body ?? "");
+
 export const initials = (name: string) =>
   name
     .trim()

@@ -262,7 +262,79 @@ export type Permission =
   | "predictions.rules"
   | "competitions.manage"
   | "messages.broadcast"
-  | "notifications.send";
+  | "notifications.send"
+  | "wallet.view"
+  | "wallet.manage";
+
+// ── Wallet ledger ──
+// No money moves through the app: entry fees are paid into the organiser's bank account and
+// winners are paid by bank transfer. The ledger records it. Amounts are in kobo (₦1 = 100) and
+// signed: an entry fee and winnings are plus, a payout minus, an adjustment either way.
+export type WalletKind = "entry_fee" | "winnings" | "payout" | "adjustment";
+
+export interface WalletEntryDto {
+  id: string;
+  userId: string;
+  season: string;
+  kind: WalletKind;
+  amountKobo: number;
+  note: string | null;
+  occurredAt: string;
+  createdAt: string;
+  createdByName: string;
+  // On a reversal: the entry it cancels.
+  reversesEntryId: string | null;
+  // On an entry that has been reversed.
+  reversed: boolean;
+}
+
+export interface MyWalletDto {
+  season: string;
+  currentSeason: string;
+  seasons: string[];
+  entryFeeKobo: number;
+  paid: boolean;
+  paidInKobo: number;
+  wonKobo: number;
+  paidOutKobo: number;
+  // Won but not yet paid to them.
+  balanceKobo: number;
+  potKobo: number;
+  paidPlayers: number;
+  entries: WalletEntryDto[];
+}
+
+export interface WalletPlayerDto {
+  userId: string;
+  name: string;
+  whatsAppName: string | null;
+  isDisabled: boolean;
+  paid: boolean;
+  paidInKobo: number;
+  wonKobo: number;
+  paidOutKobo: number;
+  balanceKobo: number;
+}
+
+export interface AdminWalletDto {
+  season: string;
+  currentSeason: string;
+  seasons: string[];
+  entryFeeKobo: number;
+  potKobo: number;
+  allocatedKobo: number;
+  unallocatedKobo: number;
+  paidOutKobo: number;
+  // Won but not yet paid: what the organiser still has to send.
+  owedKobo: number;
+  paidPlayers: number;
+  players: WalletPlayerDto[];
+}
+
+export interface PlayerLedgerDto {
+  player: WalletPlayerDto;
+  entries: WalletEntryDto[];
+}
 
 export interface NotificationPreferencesDto {
   reminders: boolean;
@@ -693,6 +765,16 @@ export interface ChatMessageDto {
   clientId: string | null;
   createdAt: string;
   deletedAt: string | null;
+  // null for text only, and once deleted.
+  image?: ChatImageDto | null;
+}
+
+// A signed link to the image in Supabase Storage. It expires after a while (a day by default); fetching the
+// messages again gives a fresh one.
+export interface ChatImageDto {
+  url: string;
+  width: number | null;
+  height: number | null;
 }
 
 export interface ConversationDto {
@@ -805,7 +887,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const res = await fetch(`${BASE_URL}${path}`, {
       ...options,
       headers: {
-        "Content-Type": "application/json",
+        // A FormData body sets its own multipart type, with the boundary.
+        ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(options.headers ?? {}),
       },
@@ -888,6 +971,11 @@ export const api = {
     register: (flowId: string, name: string, response: unknown) =>
       request<PasskeyDto>("/api/passkeys/register", { method: "POST", body: JSON.stringify({ flowId, name, response }) }),
     remove: (id: string) => request<void>(`/api/passkeys/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  },
+
+  // The player's own wallet: paid or not, winnings, payouts, and the pot.
+  wallet: {
+    get: (season?: string) => request<MyWalletDto>(`/api/wallet${season ? `?season=${encodeURIComponent(season)}` : ""}`),
   },
 
   // In-app notifications: reminders and admin notifications, kept for the next visit.
@@ -998,6 +1086,24 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ body, clientId }),
       }),
+    // An image with an optional caption; clientId makes a retry safe, as for text.
+    sendImage: (
+      conversationId: string,
+      image: { blob: Blob; name: string; width: number; height: number },
+      body: string,
+      clientId: string,
+    ) => {
+      const form = new FormData();
+      form.append("file", image.blob, image.name);
+      form.append("body", body);
+      form.append("clientId", clientId);
+      form.append("width", String(image.width));
+      form.append("height", String(image.height));
+      return request<ChatMessageDto>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/images`, {
+        method: "POST",
+        body: form,
+      });
+    },
     markRead: (conversationId: string) =>
       request<ReadReceiptDto>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/read`, {
         method: "POST",
@@ -1050,6 +1156,42 @@ export const api = {
           body: JSON.stringify(notification),
         }),
       history: () => request<PushBroadcastDto[]>("/api/admin/notifications/history"),
+    },
+    // The wallet ledger ("View wallets"; changes need "Record payments").
+    wallet: {
+      get: (season?: string) =>
+        request<AdminWalletDto>(`/api/admin/wallet${season ? `?season=${encodeURIComponent(season)}` : ""}`),
+      player: (userId: string, season: string) =>
+        request<PlayerLedgerDto>(
+          `/api/admin/wallet/users/${encodeURIComponent(userId)}?season=${encodeURIComponent(season)}`,
+        ),
+      // Marks them as having paid the season's entry fee; those already paid are skipped.
+      recordEntryFees: (userIds: string[], season: string, note?: string, occurredAt?: string) =>
+        request<{ recorded: number; alreadyPaid: number; wallet: AdminWalletDto }>("/api/admin/wallet/entry-fees", {
+          method: "POST",
+          body: JSON.stringify({ userIds, season, note, occurredAt }),
+        }),
+      // Winnings and payouts: a positive amount. Adjustment: plus or minus, with a note.
+      record: (entry: {
+        userId: string;
+        kind: Exclude<WalletKind, "entry_fee">;
+        amountKobo: number;
+        season: string;
+        note?: string;
+        occurredAt?: string;
+      }) =>
+        request<AdminWalletDto>("/api/admin/wallet/entries", { method: "POST", body: JSON.stringify(entry) }),
+      reverse: (entryId: string, reason: string) =>
+        request<AdminWalletDto>(`/api/admin/wallet/entries/${encodeURIComponent(entryId)}/reverse`, {
+          method: "POST",
+          body: JSON.stringify({ reason }),
+        }),
+      // System admin only: start a new season or change the entry fee.
+      updateSettings: (season: string, entryFeeKobo: number) =>
+        request<AdminWalletDto>("/api/admin/wallet/settings", {
+          method: "PUT",
+          body: JSON.stringify({ season, entryFeeKobo }),
+        }),
     },
     email: {
       status: () => request<EmailStatusDto>("/api/admin/email/status"),
