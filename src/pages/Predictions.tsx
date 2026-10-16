@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DEFAULT_PREDICTION_RULES, isFixtureOpen, weekPredictionState } from "@/lib/predictionRules";
 import { OUTCOME_STYLES, outcomeLabel } from "@/lib/outcomeStyles";
-import { canGoToExtraTime, weekLabel } from "@/lib/weeks";
+import { activeWeek, canGoToExtraTime, weekLabel } from "@/lib/weeks";
 import { useCompetition } from "@/context/CompetitionContext";
 
 type Pick = { outcome: OutcomeType; homeGoals?: number; awayGoals?: number };
@@ -149,12 +149,28 @@ const Predictions = () => {
 
   const selectedWeek = weeks?.find((w) => w.id === selectedWeekId) ?? weeks?.[0];
 
-  // Set default selected week once data loads
+  // Once the weeks load, open the one being predicted now: the week whose next match kicks off
+  // soonest (the same rule as reminders and the admin overview), else the most recent.
   useEffect(() => {
     if (!weeks?.length || selectedWeekId) return;
-    const active = weeks.find((w) => w.fixtures.some((f) => f.status === "pre_match"));
-    setSelectedWeekId(active?.id ?? weeks[weeks.length - 1].id);
+    setSelectedWeekId((activeWeek(weeks) ?? weeks[weeks.length - 1]).id);
   }, [weeks, selectedWeekId]);
+
+  // Bring the chosen week's button into the middle of the week row, so the current week is in
+  // view on arrival instead of off to the right. Only the row scrolls, never the page.
+  const weekRowRef = useRef<HTMLDivElement>(null);
+  const weekRowPlacedRef = useRef(false);
+  useEffect(() => {
+    const row = weekRowRef.current;
+    const chip = row?.querySelector<HTMLElement>(`[data-week-id="${CSS.escape(selectedWeekId)}"]`);
+    if (!row || !chip) return;
+    row.scrollTo({
+      left: chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2,
+      // Straight there on arrival; glide when switching weeks.
+      behavior: weekRowPlacedRef.current ? "smooth" : "auto",
+    });
+    weekRowPlacedRef.current = true;
+  }, [selectedWeekId, weeks]);
 
   // Sync picks from server predictions when week changes
   useEffect(() => {
@@ -351,7 +367,7 @@ const Predictions = () => {
         </div>
 
         {/* Week selector */}
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div ref={weekRowRef} className="relative flex gap-2 overflow-x-auto pb-1">
           {weeks.map((w) => {
             const wLocked =
               w.id === selectedWeek.id
@@ -360,6 +376,7 @@ const Predictions = () => {
             return (
               <button
                 key={w.id}
+                data-week-id={w.id}
                 onClick={() => switchWeek(w.id)}
                 className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
                   w.id === selectedWeekId
