@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { activeWeek } from "@/lib/weeks";
 import { usePermissions } from "@/lib/permissions";
 import AdminLayout from "@/components/AdminLayout";
+import { FixturesChart, ParticipationChart } from "@/components/AdminOverviewCharts";
 import CompetitionSwitcher from "@/components/CompetitionSwitcher";
 import { useApp } from "@/context/AppContext";
 import { useCompetition } from "@/context/CompetitionContext";
@@ -117,6 +118,17 @@ const AdminOverview = () => {
             {currentWeek ? `${currentWeek.name} · ${currentWeek.competition}` : "No active week"}
           </p>
         </div>
+
+        {(participation || (weeks && weeks.length > 0)) && (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {participation && <ParticipationChart participation={participation} />}
+            {weeks && weeks.length > 0 && (
+              <div className={participation ? "" : "md:col-span-2"}>
+                <FixturesChart weeks={weeks} currentWeekId={currentWeek?.id} />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Players still to predict the open week */}
         {participation && openLock && chase > 0 && (

@@ -165,7 +165,7 @@ const EmailStatusCard = () => {
               <RadioGroupItem value="auto" id="email-auto" className="mt-0.5" />
               <span>
                 <Label htmlFor="email-auto">First one set up</Label>
-                <span className="block text-xs text-muted-foreground">Resend, then Brevo, then Gmail.</span>
+                <span className="block text-xs text-muted-foreground">Brevo, then Gmail, then Resend.</span>
               </span>
             </label>
             {status.providers.map((p) => {
