@@ -1181,6 +1181,12 @@ export const api = {
         occurredAt?: string;
       }) =>
         request<AdminWalletDto>("/api/admin/wallet/entries", { method: "POST", body: JSON.stringify(entry) }),
+      // System admin only: reverses the player's entry fee for the season, taking it out of the pot.
+      markUnpaid: (userId: string, season: string, reason: string) =>
+        request<AdminWalletDto>(`/api/admin/wallet/users/${encodeURIComponent(userId)}/unpaid`, {
+          method: "POST",
+          body: JSON.stringify({ season, reason }),
+        }),
       reverse: (entryId: string, reason: string) =>
         request<AdminWalletDto>(`/api/admin/wallet/entries/${encodeURIComponent(entryId)}/reverse`, {
           method: "POST",

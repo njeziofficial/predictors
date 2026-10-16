@@ -121,6 +121,87 @@ const MarkPaidDialog = ({
   );
 };
 
+// ── Mark a player as unpaid (system admin) ───────────────────────────────────
+
+const MarkUnpaidDialog = ({
+  player,
+  wallet,
+  onClose,
+  onSaved,
+}: {
+  player: WalletPlayerDto;
+  wallet: AdminWalletDto;
+  onClose: () => void;
+  onSaved: (wallet: AdminWalletDto) => void;
+}) => {
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const potAfter = wallet.potKobo - player.paidInKobo;
+  // Money already shared out as winnings has to stay covered by the pot.
+  const blocked = potAfter < wallet.allocatedKobo;
+
+  const save = async () => {
+    if (!reason.trim() || blocked) return;
+    setSaving(true);
+    try {
+      const next = await api.admin.wallet.markUnpaid(player.userId, wallet.season, reason.trim());
+      onSaved(next);
+      toast.success(`${displayName(player)} marked as unpaid`, { description: `The pot is now ${formatNaira(next.potKobo)}.` });
+      onClose();
+    } catch (err) {
+      toast.error(errorMessage(err, "Couldn't mark them as unpaid."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Mark {displayName(player)} as unpaid?</DialogTitle>
+          <DialogDescription>
+            Their {wallet.season} entry fee of {formatNaira(player.paidInKobo)} comes out of the pot. The payment stays in their
+            history, reversed, with your reason.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex items-center justify-between rounded-lg border border-border bg-secondary/40 px-4 py-3 text-sm">
+          <span className="text-muted-foreground">Pot</span>
+          <span className="tabular-nums">
+            {formatNaira(wallet.potKobo)} → <span className="font-semibold">{formatNaira(potAfter)}</span>
+          </span>
+        </div>
+        {blocked ? (
+          <p className="text-sm text-destructive">
+            {formatNaira(wallet.allocatedKobo)} of the pot has already been shared out as winnings, so this fee can't leave it.
+            Reverse some winnings first.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            <Label htmlFor="unpaid-reason">Reason</Label>
+            <Input
+              id="unpaid-reason"
+              value={reason}
+              maxLength={300}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Transfer never arrived"
+              autoFocus
+            />
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={save} disabled={saving || blocked || !reason.trim()}>
+            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Mark as unpaid
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 // ── Winnings, payout or adjustment for one player ────────────────────────────
 
 const RECORD_HELP: Record<RecordKind, string> = {
@@ -248,16 +329,21 @@ const LedgerDialog = ({
   player,
   season,
   canManage,
+  isSystemUser,
   onClose,
   onSaved,
 }: {
   player: WalletPlayerDto;
   season: string;
   canManage: boolean;
+  isSystemUser: boolean;
   onClose: () => void;
   onSaved: (wallet: AdminWalletDto) => void;
 }) => {
   const queryClient = useQueryClient();
+  // Undoing an entry fee is marking the player unpaid: the system admin's call.
+  const canReverse = (e: WalletEntryDto) =>
+    canManage && !e.reversed && !e.reversesEntryId && (e.kind !== "entry_fee" || isSystemUser);
   const key = ["admin-wallet-player", player.userId, season];
   const { data, isLoading, error } = useQuery({ queryKey: key, queryFn: () => api.admin.wallet.player(player.userId, season) });
   const [reversing, setReversing] = useState<WalletEntryDto | null>(null);
@@ -316,7 +402,7 @@ const LedgerDialog = ({
                   <span className={cn("text-sm font-semibold tabular-nums", e.reversed && "text-muted-foreground line-through")}>
                     {formatNaira(e.amountKobo, { signed: true })}
                   </span>
-                  {canManage && !e.reversed && !e.reversesEntryId && (
+                  {canReverse(e) && (
                     <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setReversing(e)}>
                       Reverse
                     </Button>
@@ -427,6 +513,7 @@ const AdminWallet = () => {
   const [markPaid, setMarkPaid] = useState<WalletPlayerDto[] | null>(null);
   const [recording, setRecording] = useState<{ player: WalletPlayerDto; kind: RecordKind } | null>(null);
   const [ledger, setLedger] = useState<WalletPlayerDto | null>(null);
+  const [unpaying, setUnpaying] = useState<WalletPlayerDto | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
@@ -654,6 +741,17 @@ const AdminWallet = () => {
                                   </DropdownMenuItem>
                                 </>
                               )}
+                              {isSystemUser && p.paid && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => setUnpaying(p)}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    Mark as unpaid
+                                  </DropdownMenuItem>
+                                </>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </td>
@@ -679,9 +777,13 @@ const AdminWallet = () => {
                 player={ledger}
                 season={data.season}
                 canManage={canManage}
+                isSystemUser={isSystemUser}
                 onClose={() => setLedger(null)}
                 onSaved={onSaved}
               />
+            )}
+            {unpaying && (
+              <MarkUnpaidDialog player={unpaying} wallet={data} onClose={() => setUnpaying(null)} onSaved={onSaved} />
             )}
             {settingsOpen && <SeasonDialog wallet={data} onClose={() => setSettingsOpen(false)} onSaved={onSaved} />}
           </>
