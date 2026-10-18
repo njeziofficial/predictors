@@ -264,7 +264,12 @@ export type Permission =
   | "messages.broadcast"
   | "notifications.send"
   | "wallet.view"
-  | "wallet.manage";
+  | "wallet.manage"
+  | "security.idle_timeout";
+
+export interface IdleTimeoutDto {
+  minutes: number;
+}
 
 // ── Wallet ledger ──
 // No money moves through the app: entry fees are paid into the organiser's bank account and
@@ -935,6 +940,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export const api = {
   auth: {
     registrationStatus: () => request<{ open: boolean }>("/api/auth/registration-status"),
+    // Minutes without activity before the app signs out (see lib/idleTimeout).
+    sessionSettings: () => request<IdleTimeoutDto>("/api/auth/session-settings"),
     // `login` is an email address or a WhatsApp name, as `method` says.
     login: (method: LoginMethod, login: string, password: string) =>
       request<AuthResponse>("/api/auth/login", {
@@ -1275,6 +1282,9 @@ export const api = {
           body: JSON.stringify({ mode, retryCount }),
         }),
     },
+    // The idle sign-out time; needs "security.idle_timeout" (only the system admin by default).
+    setIdleTimeout: (minutes: number) =>
+      request<IdleTimeoutDto>("/api/admin/idle-timeout", { method: "PUT", body: JSON.stringify({ minutes }) }),
     // Whether a password reset also removes the account's passkeys (system admin only).
     passkeySettings: {
       get: () => request<{ removeOnPasswordReset: boolean }>("/api/admin/passkey-settings"),

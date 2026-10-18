@@ -29,6 +29,7 @@ import CompetitionsCard from "@/components/CompetitionsCard";
 import ReminderSettingsCard from "@/components/ReminderSettingsCard";
 import EmailStatusCard from "@/components/EmailStatusCard";
 import PasskeySettingsCard from "@/components/PasskeySettingsCard";
+import IdleTimeoutCard from "@/components/IdleTimeoutCard";
 import { useApp } from "@/context/AppContext";
 import { usePermissions } from "@/lib/permissions";
 
@@ -466,6 +467,8 @@ const AdminSettings = () => {
         )}
         {currentUser?.isSystemUser && <EmailStatusCard />}
         {currentUser?.isSystemUser && <PasskeySettingsCard />}
+        {/* Its own permission ("security.idle_timeout"); everyone else sees it read-only. */}
+        <IdleTimeoutCard />
 
         {!canManage && (
           <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-2 text-xs text-muted-foreground">

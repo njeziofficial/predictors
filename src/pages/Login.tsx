@@ -70,6 +70,9 @@ const Login = () => {
     if (searchParams.get("disabled") === "1") {
       toast.error("Your account has been disabled. Please contact an admin.");
       setSearchParams({}, { replace: true });
+    } else if (searchParams.get("idle") === "1") {
+      toast.info("You were signed out after a while without activity. Please sign in again.");
+      setSearchParams({}, { replace: true });
     }
   }, [searchParams, setSearchParams]);
 

@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import UpdateAvailable from "@/components/UpdateAvailable";
 import BiometricOffer from "@/components/BiometricOffer";
+import IdleSignOut from "@/components/IdleSignOut";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider, useApp } from "@/context/AppContext";
 import Login from "./pages/Login";
@@ -72,6 +73,7 @@ const App = () => (
         <UpdateAvailable />
         <BiometricOffer />
         <BrowserRouter>
+          <IdleSignOut />
           {/* Inside the router: a message toast's "Open" navigates to the chat. */}
           <ChatProvider>
             <CompetitionProvider>

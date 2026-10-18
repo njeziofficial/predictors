@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getStoredUser,
@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { clearShownNotifications, forgetPushOnThisDevice, syncPushSubscription } from "@/lib/push";
+import { resetActivity } from "@/lib/idleTimeout";
 
 interface AppState {
   currentUser: StoredUser | null;
@@ -68,17 +69,20 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const login = (token: string, user: StoredUser) => {
+    // A fresh sign-in starts the idle sign-out clock again (see IdleSignOut).
+    resetActivity();
     saveAuth(token, user);
     setCurrentUser(user);
   };
 
-  const logout = () => {
+  // Stable, so IdleSignOut's listeners aren't set up again on every render.
+  const logout = useCallback(() => {
     // Fire-and-forget: the local sign-out shouldn't wait on (or fail because of) the network.
     api.auth.logout().catch(() => {});
     void forgetPushOnThisDevice();
     clearAuth();
     setCurrentUser(null);
-  };
+  }, []);
 
   const updateUser = (patch: Partial<StoredUser>) => {
     const updated = updateStoredUser(patch);
