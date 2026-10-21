@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useApp } from "@/context/AppContext";
-import { api, type FixtureDto, type OutcomeType, type PredictionItem } from "@/lib/api";
+import { api, type FixtureDto, type MatchWeekDto, type OutcomeType, type PredictionItem } from "@/lib/api";
 import { POINTS } from "@/lib/constants";
 import { useLivePollInterval } from "@/lib/liveData";
 import { toast } from "sonner";
@@ -26,9 +26,15 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-import { DEFAULT_PREDICTION_RULES, isFixtureOpen, weekPredictionState } from "@/lib/predictionRules";
+import {
+  DEFAULT_PREDICTION_RULES,
+  isFixtureOpen,
+  rescheduledPredictionState,
+  weekPredictionState,
+  type PredictionRules,
+} from "@/lib/predictionRules";
 import { OUTCOME_STYLES, outcomeLabel } from "@/lib/outcomeStyles";
-import { activeWeek, canGoToExtraTime, weekLabel } from "@/lib/weeks";
+import { activeWeek, canGoToExtraTime, rescheduledFixtureIds, weekLabel } from "@/lib/weeks";
 import { useCompetition } from "@/context/CompetitionContext";
 
 type Pick = { outcome: OutcomeType; homeGoals?: number; awayGoals?: number };
@@ -96,6 +102,285 @@ const CountdownTimer = ({ lockTime, label }: { lockTime: Date; label: string }) 
   );
 };
 
+/** One match: its kickoff, teams and score, the saved pick, and the pick buttons while editable. */
+const PickCard = ({
+  fixture,
+  pick,
+  editable,
+  savedFinal,
+  now,
+  note,
+  animationDelay,
+  onPick,
+  onScore,
+}: {
+  fixture: FixtureDto;
+  pick: Pick | undefined;
+  editable: boolean;
+  savedFinal: boolean;
+  now: Date;
+  /** Shown after the kickoff time, e.g. "Week 6 · Rescheduled". */
+  note?: string;
+  animationDelay?: number;
+  onPick: (outcome: OutcomeType) => void;
+  onScore: (field: "homeGoals" | "awayGoals", val: string) => void;
+}) => {
+  const matchLocked = !isFixtureOpen(fixture, now);
+  return (
+    <div
+      className={`rounded-xl border border-border bg-card p-4 space-y-3 transition-all duration-300 ${
+        pick ? `border-l-4 ${OUTCOME_STYLES[pick.outcome].accent}` : ""
+      } ${matchLocked ? "opacity-60" : ""}`}
+      style={{ animationDelay: `${animationDelay ?? 0}ms` }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground">
+          {format(new Date(fixture.kickoff), "EEE, MMM d")} · {format(new Date(fixture.kickoff), "HH:mm")}
+          {note && <span className="text-primary"> · {note}</span>}
+        </span>
+        {pick && (
+          <span
+            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${OUTCOME_STYLES[pick.outcome].badge}`}
+          >
+            {!editable && (savedFinal && !matchLocked ? <Lock className="h-3 w-3" /> : <Clock className="h-3 w-3" />)}
+            {pickLabel(pick)}
+            <span className="font-normal opacity-80">
+              {editable ? `· +${POINTS[pick.outcome]}pts` : savedFinal && !matchLocked ? "· final" : ""}
+            </span>
+          </span>
+        )}
+      </div>
+
+      {/* Teams */}
+      <div className="flex items-center justify-center gap-4">
+        <div className="flex-1 text-right">
+          <span className="font-semibold text-sm">{fixture.homeTeam}</span>
+          <p className="text-[10px] text-muted-foreground">{fixture.homeTeam.substring(0, 3).toUpperCase()}</p>
+        </div>
+        <FixtureScore fixture={fixture} now={now} />
+        <div className="flex-1">
+          <span className="font-semibold text-sm">{fixture.awayTeam}</span>
+          <p className="text-[10px] text-muted-foreground">{fixture.awayTeam.substring(0, 3).toUpperCase()}</p>
+        </div>
+      </div>
+
+      {/* Prediction buttons */}
+      {editable && (
+        <>
+          <div className="grid grid-cols-4 gap-2">
+            {outcomeOptions.map((outcome) => {
+              const style = OUTCOME_STYLES[outcome];
+              const selected = pick?.outcome === outcome;
+              return (
+                <button
+                  key={outcome}
+                  onClick={() => onPick(outcome)}
+                  aria-pressed={selected}
+                  className={`flex flex-col items-center gap-0.5 py-2.5 rounded-lg border text-xs transition-all duration-200 ${
+                    selected
+                      ? `${style.solid} font-bold`
+                      : `border-border font-medium hover:border-foreground/30 ${
+                          pick ? "text-muted-foreground/60" : "text-muted-foreground"
+                        }`
+                  }`}
+                >
+                  <span className="flex items-center gap-1">
+                    {!selected && <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />}
+                    {style.label}
+                  </span>
+                  <span className="text-[10px] opacity-80">+{POINTS[outcome]}pts</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {pick?.outcome === "correct_score" && (
+            <div className="flex items-center gap-2 justify-center fade-in-up">
+              <span className="text-xs text-muted-foreground">{fixture.homeTeam}</span>
+              <Input
+                type="number"
+                min={0}
+                className="w-14 h-8 text-center text-sm bg-secondary border-border"
+                placeholder="0"
+                value={pick.homeGoals ?? ""}
+                onChange={(e) => onScore("homeGoals", e.target.value)}
+              />
+              <span className="text-muted-foreground">-</span>
+              <Input
+                type="number"
+                min={0}
+                className="w-14 h-8 text-center text-sm bg-secondary border-border"
+                placeholder="0"
+                value={pick.awayGoals ?? ""}
+                onChange={(e) => onScore("awayGoals", e.target.value)}
+              />
+              <span className="text-xs text-muted-foreground">{fixture.awayTeam}</span>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Matches moved out of their own week (a postponed match replayed weeks later), whichever week is
+ * open below. Each locks at its own kickoff, even when its week locked long ago, and none is
+ * needed to complete a week. They're saved against their own week.
+ */
+const RescheduledMatches = ({
+  weeks,
+  fixtureIds,
+  rules,
+  globalLocked,
+  now,
+}: {
+  weeks: MatchWeekDto[];
+  fixtureIds: ReadonlySet<string>;
+  rules: PredictionRules;
+  globalLocked: boolean;
+  now: Date;
+}) => {
+  const queryClient = useQueryClient();
+  const [picks, setPicks] = useState<Record<string, Pick>>({});
+  const [pendingSubmit, setPendingSubmit] = useState<PredictionItem[] | null>(null);
+
+  const { data: allPreds } = useQuery({
+    queryKey: ["predictions", "all"],
+    queryFn: () => api.predictions.mine(),
+  });
+
+  useEffect(() => {
+    if (!allPreds) return;
+    const map: Record<string, Pick> = {};
+    allPreds
+      .filter((p) => fixtureIds.has(p.fixtureId))
+      .forEach((p) => {
+        map[p.fixtureId] = { outcome: p.outcome, homeGoals: p.homeGoals ?? undefined, awayGoals: p.awayGoals ?? undefined };
+      });
+    setPicks(map);
+  }, [allPreds, fixtureIds]);
+
+  const fixtures = weeks.flatMap((w) => w.fixtures.filter((f) => fixtureIds.has(f.id)));
+  const weekOf = new Map(weeks.flatMap((w) => w.fixtures.filter((f) => fixtureIds.has(f.id)).map((f) => [f.id, w])));
+  const savedIds = new Set((allPreds ?? []).map((p) => p.fixtureId).filter((id) => fixtureIds.has(id)));
+  const state = rescheduledPredictionState(fixtures, savedIds, rules, globalLocked, now);
+  const hasSaved = state.openFixtures.some((f) => savedIds.has(f.id));
+
+  const { mutate: submitMutation, isPending: isSubmitting } = useMutation({
+    // One request per week, since predictions are saved against their match's own week.
+    mutationFn: async (predictions: PredictionItem[]) => {
+      const byWeek = new Map<string, PredictionItem[]>();
+      for (const p of predictions) {
+        const weekId = weekOf.get(p.fixtureId)!.id;
+        byWeek.set(weekId, [...(byWeek.get(weekId) ?? []), p]);
+      }
+      for (const [weekId, items] of byWeek) await api.predictions.submit(weekId, items);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["predictions"] });
+      toast.success(hasSaved && !rules.predictionsFinal ? "Predictions updated!" : "Predictions submitted!");
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to submit predictions.");
+    },
+  });
+
+  const handleSubmit = () => {
+    const editable = state.openFixtures.filter((f) => state.editableIds.has(f.id) && picks[f.id]);
+    for (const f of editable) {
+      const p = picks[f.id];
+      if (p.outcome === "correct_score" && (p.homeGoals === undefined || p.awayGoals === undefined)) {
+        toast.error(`Enter the score for ${f.homeTeam} vs ${f.awayTeam}.`);
+        return;
+      }
+    }
+    if (editable.length === 0) {
+      toast.error("Pick at least one match to predict.");
+      return;
+    }
+    const predictions: PredictionItem[] = editable.map((f) => ({ fixtureId: f.id, ...picks[f.id] }));
+    if (rules.predictionsFinal) setPendingSubmit(predictions);
+    else submitMutation(predictions);
+  };
+
+  return (
+    <section className="space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-3 fade-in-up">
+      <div>
+        <h2 className="text-lg font-bold">Rescheduled matches</h2>
+        <p className="text-xs text-muted-foreground">
+          Postponed matches being played now. Each locks at its own kickoff, even if its week has already locked.
+        </p>
+      </div>
+
+      {state.nextLockAt && <CountdownTimer lockTime={state.nextLockAt} label="Next rescheduled match locks in" />}
+
+      {globalLocked && (
+        <div className="flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-2.5 text-sm text-destructive">
+          <Lock className="h-4 w-4" />
+          <span>Predictions are currently locked by an admin</span>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {state.openFixtures.map((fixture) => (
+          <PickCard
+            key={fixture.id}
+            fixture={fixture}
+            pick={picks[fixture.id]}
+            editable={state.editableIds.has(fixture.id)}
+            savedFinal={rules.predictionsFinal && savedIds.has(fixture.id)}
+            now={now}
+            note={`${weekLabel(weekOf.get(fixture.id)!)} · Rescheduled`}
+            onPick={(outcome) =>
+              setPicks((prev) => ({
+                ...prev,
+                [fixture.id]: { outcome, homeGoals: prev[fixture.id]?.homeGoals, awayGoals: prev[fixture.id]?.awayGoals },
+              }))
+            }
+            onScore={(field, val) => {
+              const num = val === "" ? undefined : Math.max(0, parseInt(val) || 0);
+              setPicks((prev) => ({ ...prev, [fixture.id]: { ...prev[fixture.id], outcome: "correct_score", [field]: num } }));
+            }}
+          />
+        ))}
+      </div>
+
+      {state.editableIds.size > 0 && (
+        <Button className="w-full h-11 rounded-xl" onClick={handleSubmit} disabled={isSubmitting}>
+          {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          {hasSaved && !rules.predictionsFinal ? "Update rescheduled predictions" : "Submit rescheduled predictions"}
+        </Button>
+      )}
+
+      <AlertDialog open={pendingSubmit !== null} onOpenChange={(open) => !open && setPendingSubmit(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
+              Submit final predictions?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Once you submit, these picks are final. Nobody can edit or undo them, including you.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go back</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingSubmit) submitMutation(pendingSubmit);
+                setPendingSubmit(null);
+              }}
+            >
+              I understand, submit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </section>
+  );
+};
+
 const Predictions = () => {
   const { currentUser } = useApp();
   const navigate = useNavigate();
@@ -148,6 +433,9 @@ const Predictions = () => {
   });
 
   const selectedWeek = weeks?.find((w) => w.id === selectedWeekId) ?? weeks?.[0];
+  // Rescheduled matches have their own section and lock; the week's rules leave them out.
+  // Memoized: the section keeps unsaved picks until the weeks change.
+  const rescheduled = useMemo(() => rescheduledFixtureIds(weeks ?? []), [weeks]);
 
   // Once the weeks load, open the one being predicted now: the week whose next match kicks off
   // soonest (the same rule as reminders and the admin overview), else the most recent.
@@ -237,9 +525,11 @@ const Predictions = () => {
 
   const rules = lockStatus?.rules ?? DEFAULT_PREDICTION_RULES;
   const globalLocked = !!lockStatus?.locked;
-  const savedIds = new Set((existingPreds ?? []).map((p) => p.fixtureId));
+  const regular = (w: MatchWeekDto) => w.fixtures.filter((f) => !rescheduled.has(f.id));
+  const rescheduledOpen = weeks.some((w) => w.fixtures.some((f) => rescheduled.has(f.id) && isFixtureOpen(f, now)));
+  const savedIds = new Set((existingPreds ?? []).map((p) => p.fixtureId).filter((id) => !rescheduled.has(id)));
   const hasSubmitted = savedIds.size > 0;
-  const weekState = weekPredictionState(selectedWeek.fixtures, savedIds, rules, globalLocked, now);
+  const weekState = weekPredictionState(regular(selectedWeek), savedIds, rules, globalLocked, now);
   const locked = weekState.lockReason !== null;
   const sortedFixtures = [...selectedWeek.fixtures].sort(
     (a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime()
@@ -250,7 +540,9 @@ const Predictions = () => {
   const weekEnded = sortedFixtures.length > 0 && sortedFixtures.every((f) => f.status !== "pre_match" && f.status !== "live");
   const predictedCount = openFixtures.filter((f) => picks[f.id]).length;
   const missingFixtures = openFixtures.filter((f) => !picks[f.id]);
-  const potentialPts = Object.values(picks).reduce((sum, p) => sum + POINTS[p.outcome], 0);
+  const potentialPts = Object.entries(picks)
+    .filter(([id]) => !rescheduled.has(id))
+    .reduce((sum, [, p]) => sum + POINTS[p.outcome], 0);
   // Skipped matches can be filled in later unless this submission is the player's one late entry,
   // or the whole week locks at its first kickoff and that has already happened.
   const canAddSkippedLater = !weekState.lateEntry;
@@ -327,6 +619,10 @@ const Predictions = () => {
         <MyStanding userId={currentUser.id} />
         <LatestChampions weeks={weeks} currentUserId={currentUser.id} />
 
+        {rescheduledOpen && (
+          <RescheduledMatches weeks={weeks} fixtureIds={rescheduled} rules={rules} globalLocked={globalLocked} now={now} />
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -372,7 +668,7 @@ const Predictions = () => {
             const wLocked =
               w.id === selectedWeek.id
                 ? locked
-                : weekPredictionState(w.fixtures, new Set(), rules, globalLocked, now).lockReason !== null;
+                : weekPredictionState(regular(w), new Set(), rules, globalLocked, now).lockReason !== null;
             return (
               <button
                 key={w.id}
@@ -442,105 +738,29 @@ const Predictions = () => {
             <div className="space-y-3">
               {group.fixtures.map((fixture, mi) => {
                 const pick = picks[fixture.id];
-                const matchLocked = !isFixtureOpen(fixture, now);
                 const editable = weekState.editableIds.has(fixture.id);
                 const savedFinal = rules.predictionsFinal && savedIds.has(fixture.id);
 
                 return (
-                  <div
+                  <PickCard
                     key={fixture.id}
-                    className={`rounded-xl border border-border bg-card p-4 space-y-3 transition-all duration-300 ${
-                      pick ? `border-l-4 ${OUTCOME_STYLES[pick.outcome].accent}` : ""
-                    } ${matchLocked ? "opacity-60" : ""}`}
-                    style={{ animationDelay: `${(gi * 3 + mi) * 40}ms` }}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        {format(new Date(fixture.kickoff), "EEE, MMM d")} · {format(new Date(fixture.kickoff), "HH:mm")}
-                      </span>
-                      {pick && (
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${OUTCOME_STYLES[pick.outcome].badge}`}
-                        >
-                          {!editable &&
-                            (savedFinal && !matchLocked ? <Lock className="h-3 w-3" /> : <Clock className="h-3 w-3" />)}
-                          {pickLabel(pick)}
-                          <span className="font-normal opacity-80">
-                            {editable ? `· +${POINTS[pick.outcome]}pts` : savedFinal && !matchLocked ? "· final" : ""}
-                          </span>
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Teams */}
-                    <div className="flex items-center justify-center gap-4">
-                      <div className="flex-1 text-right">
-                        <span className="font-semibold text-sm">{fixture.homeTeam}</span>
-                        <p className="text-[10px] text-muted-foreground">{fixture.homeTeam.substring(0, 3).toUpperCase()}</p>
-                      </div>
-                      <FixtureScore fixture={fixture} now={now} />
-                      <div className="flex-1">
-                        <span className="font-semibold text-sm">{fixture.awayTeam}</span>
-                        <p className="text-[10px] text-muted-foreground">{fixture.awayTeam.substring(0, 3).toUpperCase()}</p>
-                      </div>
-                    </div>
-
-                    {/* Prediction buttons */}
-                    {editable && (
-                      <>
-                        <div className="grid grid-cols-4 gap-2">
-                          {outcomeOptions.map((outcome) => {
-                            const style = OUTCOME_STYLES[outcome];
-                            const selected = pick?.outcome === outcome;
-                            return (
-                              <button
-                                key={outcome}
-                                onClick={() => updatePick(fixture.id, outcome)}
-                                aria-pressed={selected}
-                                className={`flex flex-col items-center gap-0.5 py-2.5 rounded-lg border text-xs transition-all duration-200 ${
-                                  selected
-                                    ? `${style.solid} font-bold`
-                                    : `border-border font-medium hover:border-foreground/30 ${
-                                        pick ? "text-muted-foreground/60" : "text-muted-foreground"
-                                      }`
-                                }`}
-                              >
-                                <span className="flex items-center gap-1">
-                                  {!selected && <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />}
-                                  {style.label}
-                                </span>
-                                <span className="text-[10px] opacity-80">+{POINTS[outcome]}pts</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {pick?.outcome === "correct_score" && (
-                          <div className="flex items-center gap-2 justify-center fade-in-up">
-                            <span className="text-xs text-muted-foreground">{fixture.homeTeam}</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              className="w-14 h-8 text-center text-sm bg-secondary border-border"
-                              placeholder="0"
-                              value={pick.homeGoals ?? ""}
-                              onChange={(e) => updateScore(fixture.id, "homeGoals", e.target.value)}
-                            />
-                            <span className="text-muted-foreground">-</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              className="w-14 h-8 text-center text-sm bg-secondary border-border"
-                              placeholder="0"
-                              value={pick.awayGoals ?? ""}
-                              onChange={(e) => updateScore(fixture.id, "awayGoals", e.target.value)}
-                            />
-                            <span className="text-xs text-muted-foreground">{fixture.awayTeam}</span>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
+                    fixture={fixture}
+                    pick={pick}
+                    editable={editable}
+                    savedFinal={savedFinal}
+                    now={now}
+                    // Predicted in the rescheduled section, which locks it at its own kickoff.
+                    note={
+                      rescheduled.has(fixture.id)
+                        ? isFixtureOpen(fixture, now)
+                          ? "Rescheduled · predict it above"
+                          : "Rescheduled"
+                        : undefined
+                    }
+                    animationDelay={(gi * 3 + mi) * 40}
+                    onPick={(outcome) => updatePick(fixture.id, outcome)}
+                    onScore={(field, val) => updateScore(fixture.id, field, val)}
+                  />
                 );
               })}
             </div>

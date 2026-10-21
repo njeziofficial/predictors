@@ -54,6 +54,35 @@ export interface WeekPredictionState {
   nextLockIsWeek: boolean;
 }
 
+export interface RescheduledPredictionState {
+  /** Rescheduled matches still taking predictions, soonest first. */
+  openFixtures: FixtureDto[];
+  /** Those this player may pick or change right now. */
+  editableIds: Set<string>;
+  /** When the soonest of them locks, for the countdown; null when none is left. */
+  nextLockAt: Date | null;
+}
+
+/**
+ * What a player may do with rescheduled matches (see rescheduledFixtureIds). Each locks at its
+ * own kickoff whatever its week's rules did; an admin lock and final predictions still apply.
+ */
+export function rescheduledPredictionState(
+  fixtures: FixtureDto[],
+  savedFixtureIds: ReadonlySet<string>,
+  rules: PredictionRules,
+  adminLocked: boolean,
+  now: Date,
+): RescheduledPredictionState {
+  const openFixtures = fixtures
+    .filter((f) => isFixtureOpen(f, now))
+    .sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime());
+  const editableIds = new Set(
+    adminLocked ? [] : openFixtures.filter((f) => !(rules.predictionsFinal && savedFixtureIds.has(f.id))).map((f) => f.id),
+  );
+  return { openFixtures, editableIds, nextLockAt: openFixtures.length > 0 ? fixtureLockTime(openFixtures[0]) : null };
+}
+
 /**
  * What a player may do with a week right now. savedFixtureIds are the matches they have already
  * submitted predictions for in this week.

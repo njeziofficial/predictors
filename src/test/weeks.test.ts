@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { activeWeek, canGoToExtraTime, weekLabel } from "@/lib/weeks";
+import { activeWeek, canGoToExtraTime, rescheduledFixtureIds, weekLabel } from "@/lib/weeks";
 import type { FixtureStatus, MatchWeekDto } from "@/lib/api";
 
 const week = (id: string, fixtures: [string, FixtureStatus][]): MatchWeekDto => ({
@@ -62,5 +62,34 @@ describe("competition weeks", () => {
     expect(canGoToExtraTime({ id: "champions-league-r16-leg1" })).toBe(false);
     expect(canGoToExtraTime({ id: "champions-league-md-3" })).toBe(false);
     expect(canGoToExtraTime({ id: "la-liga-week-8" })).toBe(false);
+  });
+});
+
+describe("rescheduled matches", () => {
+  // Week 6's match against Athletic was postponed and is played after week 9 has started.
+  const weeks = [
+    week("w6", [["2026-09-20T15:00:00Z", "ended"], ["2026-10-21T19:00:00Z", "pre_match"]]),
+    week("w8", [["2026-10-04T15:00:00Z", "ended"], ["2026-10-06T19:00:00Z", "ended"]]),
+    week("w9", [["2026-10-17T15:00:00Z", "ended"], ["2026-10-20T19:00:00Z", "ended"]]),
+    week("w10", [["2026-10-24T15:00:00Z", "pre_match"], ["2026-10-26T19:00:00Z", "pre_match"]]),
+  ];
+  const now = new Date("2026-10-21T12:00:00Z").getTime();
+
+  it("are the matches kicking off after the competition's next week has started", () => {
+    expect([...rescheduledFixtureIds(weeks)]).toEqual(["w6-1"]);
+  });
+
+  it("don't count a week's own late match, like a Monday game", () => {
+    expect(rescheduledFixtureIds(weeks).has("w10-1")).toBe(false);
+    expect(rescheduledFixtureIds(weeks).has("w9-1")).toBe(false);
+  });
+
+  it("only compare weeks of the same competition", () => {
+    const cup = { ...week("cl-md3", [["2026-10-01T19:00:00Z", "ended"]]), competitionId: "champions-league" };
+    expect(rescheduledFixtureIds([weeks[0], cup]).size).toBe(0);
+  });
+
+  it("don't make their old week the current one", () => {
+    expect(activeWeek(weeks, now)?.id).toBe("w10");
   });
 });

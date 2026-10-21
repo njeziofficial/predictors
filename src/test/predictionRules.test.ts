@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { DEFAULT_PREDICTION_RULES, weekPredictionState, type PredictionRules } from "@/lib/predictionRules";
+import {
+  DEFAULT_PREDICTION_RULES,
+  rescheduledPredictionState,
+  weekPredictionState,
+  type PredictionRules,
+} from "@/lib/predictionRules";
 import type { FixtureDto, FixtureStatus } from "@/lib/api";
 
 const fixture = (id: string, kickoff: string, status: FixtureStatus = "pre_match"): FixtureDto => ({
@@ -89,5 +94,21 @@ describe("weekPredictionState", () => {
       NOW,
     );
     expect(s.lockReason).toBeNull();
+  });
+});
+
+describe("rescheduledPredictionState", () => {
+  const replayed = [fixture("r1", "2026-10-09T19:00:00Z"), fixture("r2", "2026-10-09T18:00:20Z")];
+
+  it("keeps each match open until 30 seconds before its own kickoff, whatever the week lock", () => {
+    const s = rescheduledPredictionState(replayed, new Set(["r1"]), rules({ lockWeekAtFirstKickoff: true }), false, NOW);
+    expect(s.openFixtures.map((f) => f.id)).toEqual(["r1"]);
+    expect([...s.editableIds]).toEqual(["r1"]);
+    expect(s.nextLockAt?.toISOString()).toBe("2026-10-09T18:59:30.000Z");
+  });
+
+  it("still honours final predictions and the admin lock", () => {
+    expect(rescheduledPredictionState(replayed, new Set(["r1"]), rules({ predictionsFinal: true }), false, NOW).editableIds.size).toBe(0);
+    expect(rescheduledPredictionState(replayed, none, DEFAULT_PREDICTION_RULES, true, NOW).editableIds.size).toBe(0);
   });
 });
