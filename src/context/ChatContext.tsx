@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router-dom";
-import { HubConnectionBuilder, HubConnectionState, LogLevel, type HubConnection } from "@microsoft/signalr";
 import { toast } from "sonner";
 import { useApp } from "@/context/AppContext";
-import { api, CHAT_HUB_URL, getFreshToken, type ChatMessageDto, type ConversationDto, type ReadReceiptDto } from "@/lib/api";
+import { api, getFreshToken, type ChatMessageDto, type ConversationDto, type ReadReceiptDto } from "@/lib/api";
+import { createRealtimeConnection, type RealtimeConnection, type RealtimeStatus } from "@/lib/realtime";
 import {
   applyDeletedToConversations,
   applyMessageToConversations,
@@ -18,7 +18,7 @@ import {
 } from "@/lib/chat";
 import { ALL_LIVE_AREAS, invalidateLiveAreas } from "@/lib/liveData";
 
-export type ChatConnectionStatus = "offline" | "connecting" | "connected" | "reconnecting";
+export type ChatConnectionStatus = RealtimeStatus;
 
 interface ChatState {
   status: ChatConnectionStatus;
@@ -36,8 +36,6 @@ const ChatContext = createContext<ChatState | undefined>(undefined);
 
 const TYPING_SHOWN_MS = 4000;
 const TYPING_THROTTLE_MS = 2500;
-// Reconnect quickly at first, then keep trying every 30s for as long as the tab is open.
-const RETRY_DELAYS = [0, 2000, 5000, 10000];
 
 const chatPath = (pathname: string) => (pathname.startsWith("/admin") ? "/admin/messages" : "/messages");
 
@@ -55,7 +53,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [presence, setPresence] = useState<Record<string, boolean>>({});
   const [typing, setTyping] = useState<Record<string, number>>({});
 
-  const connectionRef = useRef<HubConnection | null>(null);
+  const connectionRef = useRef<RealtimeConnection | null>(null);
   const activeRef = useRef<string | null>(null);
   const lastTypingSentRef = useRef<Record<string, number>>({});
   const pathRef = useRef(location.pathname);
@@ -79,17 +77,24 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (!enabled || !meId) return;
 
-    const connection = new HubConnectionBuilder()
-      .withUrl(CHAT_HUB_URL, {
-        accessTokenFactory: getFreshToken,
-        // Auth is the bearer token, not cookies, so the hub needs no credentialed CORS.
-        withCredentials: false,
-      })
-      .withAutomaticReconnect({
-        nextRetryDelayInMilliseconds: (ctx) => RETRY_DELAYS[ctx.previousRetryCount] ?? 30_000,
-      })
-      .configureLogging(LogLevel.Warning)
-      .build();
+    // Whether the app is in front: while it isn't, the server pushes new messages to the
+    // phone instead (a backgrounded app can keep this connection for a while).
+    const reportActive = () => connection.send("SetActive", document.visibilityState === "visible");
+
+    // SignalR to the .NET backend, Socket.IO to the NestJS one (see lib/realtime).
+    const connection = createRealtimeConnection({
+      getToken: getFreshToken,
+      onStatus: setStatus,
+      onConnected: (reconnected) => {
+        reportActive();
+        if (!reconnected) return;
+        // Whatever happened while we were away: fetch it rather than guess.
+        setPresence({});
+        queryClient.invalidateQueries({ queryKey: chatKeys.all });
+        // Any DataChanged pushes sent while we were away were missed.
+        invalidateLiveAreas(queryClient, ALL_LIVE_AREAS);
+      },
+    });
     connectionRef.current = connection;
 
     const onMessage = (message: ChatMessageDto) => {
@@ -172,51 +177,13 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       invalidateLiveAreas(queryClient, areas);
     });
 
-    // Whether the app is in front: while it isn't, the server pushes new messages to the
-    // phone instead (a backgrounded app can keep this connection for a while).
-    const reportActive = () => {
-      if (connection.state !== HubConnectionState.Connected) return;
-      connection.invoke("SetActive", document.visibilityState === "visible").catch(() => {});
-    };
     document.addEventListener("visibilitychange", reportActive);
-
-    connection.onreconnecting(() => setStatus("reconnecting"));
-    connection.onreconnected(() => {
-      setStatus("connected");
-      reportActive();
-      // Whatever happened while we were away: fetch it rather than guess.
-      setPresence({});
-      queryClient.invalidateQueries({ queryKey: chatKeys.all });
-      // Any DataChanged pushes sent while we were away were missed.
-      invalidateLiveAreas(queryClient, ALL_LIVE_AREAS);
-    });
-    connection.onclose(() => setStatus("offline"));
-
-    let cancelled = false;
-    const start = async (attempt = 0) => {
-      if (cancelled) return;
-      setStatus("connecting");
-      try {
-        await connection.start();
-        if (!cancelled) {
-          setStatus("connected");
-          reportActive();
-        }
-      } catch {
-        // withAutomaticReconnect only covers drops after a successful start.
-        if (!cancelled) {
-          setStatus("reconnecting");
-          setTimeout(() => start(attempt + 1), RETRY_DELAYS[attempt + 1] ?? 30_000);
-        }
-      }
-    };
-    start();
+    connection.start();
 
     return () => {
-      cancelled = true;
       document.removeEventListener("visibilitychange", reportActive);
       connectionRef.current = null;
-      connection.stop().catch(() => {});
+      connection.stop();
       setStatus("offline");
     };
   }, [enabled, meId, queryClient, navigate]);
@@ -243,11 +210,11 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
 
   const notifyTyping = useCallback((conversationId: string) => {
     const connection = connectionRef.current;
-    if (connection?.state !== HubConnectionState.Connected) return;
+    if (!connection?.isConnected()) return;
     const now = Date.now();
     if (now - (lastTypingSentRef.current[conversationId] ?? 0) < TYPING_THROTTLE_MS) return;
     lastTypingSentRef.current[conversationId] = now;
-    connection.invoke("Typing", conversationId).catch(() => {});
+    connection.send("Typing", conversationId);
   }, []);
 
   const setActiveConversation = useCallback((conversationId: string | null) => {

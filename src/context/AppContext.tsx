@@ -22,19 +22,26 @@ interface AppState {
 const AppContext = createContext<AppState | undefined>(undefined);
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
-  const [currentUser, setCurrentUser] = useState<StoredUser | null>(getStoredUser);
+  const [currentUser, setCurrentUserState] = useState<StoredUser | null>(getStoredUser);
   const queryClient = useQueryClient();
 
   // Cached responses belong to whoever fetched them (predictions, profile, admin lists, chats).
   // Drop them all when the signed-in account changes, so the next person on this browser never
-  // sees the last one's data, even for a moment.
+  // sees the last one's data, even for a moment. This happens before the new user is set, not in
+  // an effect: children's effects run first, so queries that start on sign-in (the competitions
+  // list) would already be fetching, and clearing then cancels them for good.
   const cachedForUser = useRef(currentUser?.id ?? null);
-  useEffect(() => {
-    const id = currentUser?.id ?? null;
-    if (id === cachedForUser.current) return;
-    cachedForUser.current = id;
-    queryClient.clear();
-  }, [currentUser?.id, queryClient]);
+  const setCurrentUser = useCallback(
+    (user: StoredUser | null) => {
+      const id = user?.id ?? null;
+      if (id !== cachedForUser.current) {
+        cachedForUser.current = id;
+        queryClient.clear();
+      }
+      setCurrentUserState(user);
+    },
+    [queryClient],
+  );
 
   // This browser's push subscription follows whoever is signed in (see lib/push.ts).
   useEffect(() => {
@@ -66,7 +73,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       window.removeEventListener(AUTH_CHANGED_EVENT, sync);
       window.removeEventListener("storage", sync);
     };
-  }, []);
+  }, [setCurrentUser]);
 
   const login = (token: string, user: StoredUser) => {
     // A fresh sign-in starts the idle sign-out clock again (see IdleSignOut).
@@ -82,7 +89,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     void forgetPushOnThisDevice();
     clearAuth();
     setCurrentUser(null);
-  }, []);
+  }, [setCurrentUser]);
 
   const updateUser = (patch: Partial<StoredUser>) => {
     const updated = updateStoredUser(patch);

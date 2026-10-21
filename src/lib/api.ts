@@ -6,6 +6,7 @@ import type { PredictionRules } from "./predictionRules";
 const BASE_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:63487";
 
+export const API_BASE_URL = BASE_URL;
 export const CHAT_HUB_URL = `${BASE_URL}/api/hubs/chat`;
 
 // ── Response types ────────────────────────────────────────────────────────────
