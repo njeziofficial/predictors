@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ClipboardList, Trophy, Radio, Clock, User, LogOut, LayoutDashboard, MessageCircle, Wallet } from "lucide-react";
+import { ClipboardList, Trophy, Radio, Clock, User, LogOut, LayoutDashboard, MessageCircle, Wallet, Award } from "lucide-react";
 import { BrandLogo } from "@/components/Brand";
 import NotificationBell from "@/components/NotificationBell";
 import CompetitionSwitcher from "@/components/CompetitionSwitcher";
@@ -8,9 +8,12 @@ import { useApp } from "@/context/AppContext";
 import { useChat } from "@/context/ChatContext";
 import { setArea } from "@/lib/permissions";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 
 const navItems = [
   { path: "/predict", label: "Predict", icon: ClipboardList },
+  { path: "/ballon-dor", label: "Ballon d'Or", icon: Award },
   { path: "/leaderboard", label: "Standings", icon: Trophy },
   { path: "/status", label: "Live", icon: Radio },
   { path: "/dashboard", label: "History", icon: Clock },
@@ -36,7 +39,15 @@ const NavBar = () => {
     navigate("/");
   };
 
-  const items = navItems;
+  // Ballon d'Or only while there's a game players can see: none, or one the system admin has
+  // switched off, and the link goes. Shares the page's query.
+  const { data: ballonDor } = useQuery({
+    queryKey: ["ballon-dor"],
+    queryFn: () => api.ballonDor.get(),
+    enabled: !!currentUser,
+    staleTime: 60_000,
+  });
+  const items = navItems.filter((item) => item.path !== "/ballon-dor" || !!ballonDor);
 
   return (
     <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">

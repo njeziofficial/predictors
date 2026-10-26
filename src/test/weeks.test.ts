@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { activeWeek, canGoToExtraTime, rescheduledFixtureIds, weekLabel } from "@/lib/weeks";
+import { activeWeek, canGoToExtraTime, rescheduledFixtureIds, weekLabel, weekStarted } from "@/lib/weeks";
 import type { FixtureStatus, MatchWeekDto } from "@/lib/api";
 
 const week = (id: string, fixtures: [string, FixtureStatus][]): MatchWeekDto => ({
@@ -91,5 +91,17 @@ describe("rescheduled matches", () => {
 
   it("don't make their old week the current one", () => {
     expect(activeWeek(weeks, now)?.id).toBe("w10");
+  });
+});
+
+describe("weekStarted", () => {
+  it("doesn't count a match called off before kickoff", () => {
+    expect(weekStarted(week("w10", [["2026-10-30T19:00:00Z", "postponed"], ["2026-10-31T19:00:00Z", "pre_match"]]))).toBe(false);
+    expect(weekStarted(week("w10", [["2026-10-30T19:00:00Z", "cancelled"], ["2026-10-31T19:00:00Z", "pre_match"]]))).toBe(false);
+  });
+
+  it("counts a match in play or played", () => {
+    expect(weekStarted(week("w10", [["2026-10-30T19:00:00Z", "live"], ["2026-10-31T19:00:00Z", "pre_match"]]))).toBe(true);
+    expect(weekStarted(week("w10", [["2026-10-30T19:00:00Z", "ended"], ["2026-10-31T19:00:00Z", "postponed"]]))).toBe(true);
   });
 });

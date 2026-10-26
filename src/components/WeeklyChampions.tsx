@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useQueries } from "@tanstack/react-query";
 import { Crown, Medal, ChevronRight, Target } from "lucide-react";
 import { api, type LeaderboardEntryDto, type MatchWeekDto } from "@/lib/api";
-import { weekLabel } from "@/lib/weeks";
+import { weekLabel, weekStarted } from "@/lib/weeks";
 
 // Gold, silver, bronze — indexed by finishing place - 1.
 const MEDALS = [
@@ -38,9 +38,8 @@ interface WeekChampions {
   final: boolean;
 }
 
-const hasStarted = (w: MatchWeekDto) => w.fixtures.some(f => f.status !== "pre_match");
 const isFinal = (w: MatchWeekDto) =>
-  w.fixtures.length > 0 && w.fixtures.every(f => f.status !== "pre_match" && f.status !== "live");
+  weekStarted(w) && w.fixtures.every(f => f.status !== "pre_match" && f.status !== "live");
 const firstKickoff = (w: MatchWeekDto) =>
   Math.min(...w.fixtures.map(f => new Date(f.kickoff).getTime()));
 
@@ -64,7 +63,7 @@ function useWeeklyChampions(
   opts: { enabled: boolean; onlyFinal?: boolean; limit?: number },
 ) {
   const candidates = weeks
-    .filter(w => (opts.onlyFinal ? isFinal(w) : hasStarted(w)))
+    .filter(w => (opts.onlyFinal ? isFinal(w) : weekStarted(w)))
     .sort((a, b) => firstKickoff(b) - firstKickoff(a))
     .slice(0, opts.limit ?? Infinity);
 

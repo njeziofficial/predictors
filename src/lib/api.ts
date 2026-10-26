@@ -342,6 +342,37 @@ export interface PlayerLedgerDto {
   entries: WalletEntryDto[];
 }
 
+// ── Ballon d'Or side game ──
+// Amounts in kobo. Prizes are paid into the winners' wallets when an admin enters the result.
+
+export interface BallonDorEntryDto {
+  userId: string;
+  name: string;
+  picks: string[];
+  pickedAt: string;
+  calledWinner: boolean;
+  calledTopFive: boolean;
+  correctPlaces: number;
+  prizeKobo: number;
+}
+
+export interface BallonDorDto {
+  year: number;
+  nominees: string[];
+  locksAt: string;
+  locked: boolean;
+  // The real top 5, winner first, once entered.
+  result: string[] | null;
+  winnerPotKobo: number;
+  topFivePotKobo: number;
+  entries: number;
+  myPicks: string[] | null;
+  // Everyone's picks: for players once picks lock, for admins always.
+  board: BallonDorEntryDto[] | null;
+  // Shown to players. Players never get a game that's off (their endpoint answers "none").
+  enabled: boolean;
+}
+
 export interface NotificationPreferencesDto {
   reminders: boolean;
   announcements: boolean;
@@ -986,6 +1017,14 @@ export const api = {
     get: (season?: string) => request<MyWalletDto>(`/api/wallet${season ? `?season=${encodeURIComponent(season)}` : ""}`),
   },
 
+  // The Ballon d'Or side game: null when there's none (the API answers 204, and React Query
+  // treats an undefined result as a failure).
+  ballonDor: {
+    get: () => request<BallonDorDto | undefined>("/api/ballon-dor").then((g) => g ?? null),
+    submit: (year: number, picks: string[]) =>
+      request<BallonDorDto>(`/api/ballon-dor/${year}/picks`, { method: "PUT", body: JSON.stringify({ picks }) }),
+  },
+
   // In-app notifications: reminders and admin notifications, kept for the next visit.
   notifications: {
     list: (query: InboxQuery = {}) => {
@@ -1206,6 +1245,19 @@ export const api = {
           method: "PUT",
           body: JSON.stringify({ season, entryFeeKobo }),
         }),
+    },
+    // The Ballon d'Or side game ("View wallets"; changes need "Record payments", since the
+    // result pays the prizes into the wallets).
+    ballonDor: {
+      get: () => request<BallonDorDto | undefined>("/api/admin/ballon-dor").then((g) => g ?? null),
+      save: (event: { year: number; nominees: string[]; locksAt: string; winnerPotKobo: number; topFivePotKobo: number }) =>
+        request<BallonDorDto>("/api/admin/ballon-dor", { method: "PUT", body: JSON.stringify(event) }),
+      // Winner first. null clears it, taking back the prizes it paid.
+      setResult: (year: number, result: string[] | null) =>
+        request<BallonDorDto>(`/api/admin/ballon-dor/${year}/result`, { method: "PUT", body: JSON.stringify({ result }) }),
+      // Shows the game to players or hides it. System user only.
+      setEnabled: (year: number, enabled: boolean) =>
+        request<BallonDorDto>(`/api/admin/ballon-dor/${year}/enabled`, { method: "PUT", body: JSON.stringify({ enabled }) }),
     },
     email: {
       status: () => request<EmailStatusDto>("/api/admin/email/status"),

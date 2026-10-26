@@ -52,4 +52,11 @@ describe("describeEntry", () => {
     expect(describeEntry(entry({ kind: "payout", amountKobo: -500000 }))).toBe("Paid to your bank");
     expect(describeEntry(entry({ kind: "winnings", reversesEntryId: "e0", amountKobo: -100 }))).toBe("Winnings reversed");
   });
+
+  it("names Ballon d'Or prizes, which are adjustments", () => {
+    const prize = { kind: "adjustment" as const, amountKobo: 125000, note: "Ballon d'Or 2026: called the winner" };
+    expect(describeEntry(entry(prize))).toBe("Ballon d'Or prize");
+    expect(describeEntry(entry({ ...prize, amountKobo: -125000, reversesEntryId: "e0" }))).toBe("Ballon d'Or prize reversed");
+    expect(describeEntry(entry({ kind: "adjustment", note: "Bank charge" }))).toBe("Adjustment");
+  });
 });

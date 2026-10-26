@@ -22,8 +22,12 @@ export const KIND_LABEL: Record<WalletKind, string> = {
   adjustment: "Adjustment",
 };
 
+// Ballon d'Or prizes are adjustments (the organiser's money, not the season pot) noted like this.
+const isBallonDorPrize = (entry: WalletEntryDto) => entry.kind === "adjustment" && !!entry.note?.startsWith("Ballon d'Or");
+
 /** What an entry means to the player reading it. */
 export function describeEntry(entry: WalletEntryDto): string {
+  if (isBallonDorPrize(entry)) return entry.reversesEntryId ? "Ballon d'Or prize reversed" : "Ballon d'Or prize";
   if (entry.reversesEntryId) return `${KIND_LABEL[entry.kind]} reversed`;
   switch (entry.kind) {
     case "entry_fee":

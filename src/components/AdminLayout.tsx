@@ -18,6 +18,7 @@ import {
   MessageCircle,
   BellRing,
   Wallet,
+  Award,
 } from "lucide-react";
 import { BrandLoader, BrandLogo, BrandMark } from "@/components/Brand";
 import NotificationBell from "@/components/NotificationBell";
@@ -35,6 +36,7 @@ const navItems: { path: string; label: string; icon: typeof LayoutDashboard; per
   { path: "/admin/marking", label: "Marking", icon: ListChecks, permission: "marking.view" },
   { path: "/admin/users", label: "Users", icon: Users, permission: "users.view" },
   { path: "/admin/wallet", label: "Wallet", icon: Wallet, permission: "wallet.view" },
+  { path: "/admin/ballon-dor", label: "Ballon d'Or", icon: Award, permission: "wallet.view" },
   { path: "/admin/previous-points", label: "Previous Points", icon: History, permission: "previous_points.view" },
   { path: "/admin/audit", label: "Audit Trail", icon: ScrollText, permission: "audit.view" },
   { path: "/admin/settings", label: "Settings", icon: Settings, permission: "settings.view" },

@@ -23,6 +23,12 @@ export const nextKickoff = (w: MatchWeekDto, ignore: ReadonlySet<string> = new S
 const isPlayable = (f: FixtureDto) => f.status !== "postponed" && f.status !== "cancelled";
 
 /**
+ * A match of the week has kicked off. A postponed or cancelled match doesn't count: it isn't
+ * pre-match either, but calling one off before kickoff doesn't start the week.
+ */
+export const weekStarted = (w: MatchWeekDto) => w.fixtures.some((f) => f.status === "live" || f.status === "ended");
+
+/**
  * Matches moved out of their own week: they kick off after the competition's next week has
  * started (a postponed match played weeks later, even one postponed before the app had it).
  * They're predicted on their own, each locking at its own kickoff. Mirrors RescheduledFixtures

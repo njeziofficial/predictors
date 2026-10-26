@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useApp } from "@/context/AppContext";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { api, type LeaderboardEntryDto } from "@/lib/api";
+import { standingsThrough } from "@/lib/standings";
 import { format } from "date-fns";
 import { Trophy, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import WeeklyChampions from "@/components/WeeklyChampions";
 import { useCompetition } from "@/context/CompetitionContext";
+import { weekLabel, weekStarted } from "@/lib/weeks";
 
 type Tab = "weekly" | "overall" | "champions";
 
@@ -28,9 +30,14 @@ const Leaderboard = () => {
   const setTab = (t: Tab) => setSearchParams(t === "overall" ? {} : { tab: t }, { replace: true });
   // null = the latest started week.
   const [pickedWeekIdx, setWeekIdx] = useState<number | null>(null);
+  // The season table after which week; null = as it stands now.
+  const [pickedSeasonIdx, setSeasonIdx] = useState<number | null>(null);
   const { competitionId, competitionName, hasChoice, selectWeeks } = useCompetition();
   // Another competition's weeks: start again from its latest.
-  useEffect(() => setWeekIdx(null), [competitionId]);
+  useEffect(() => {
+    setWeekIdx(null);
+    setSeasonIdx(null);
+  }, [competitionId]);
 
   const { data: weeks = [] } = useQuery({
     queryKey: ["weeks"],
@@ -42,7 +49,7 @@ const Leaderboard = () => {
   // Oldest first, so the arrows step back and forward in time.
   const firstKickoff = (w: (typeof weeks)[number]) => Math.min(...w.fixtures.map(f => new Date(f.kickoff).getTime()));
   const activeWeeks = weeks
-    .filter(w => w.fixtures.some(f => f.status !== "pre_match"))
+    .filter(weekStarted)
     .sort((a, b) => firstKickoff(a) - firstKickoff(b));
   const weekIdx = pickedWeekIdx ?? activeWeeks.length - 1;
   const currentWeekData = activeWeeks[weekIdx];
@@ -59,6 +66,23 @@ const Leaderboard = () => {
     enabled: !!currentUser && !!currentWeekData?.id,
   });
 
+  // An earlier week's season table is built from every started week's own table (the same
+  // queries the weekly view and Champions use), so they're only fetched once one is picked.
+  const seasonIdx = pickedSeasonIdx ?? activeWeeks.length - 1;
+  const seasonNow = seasonIdx >= activeWeeks.length - 1;
+  const weeklyBoards = useQueries({
+    queries: activeWeeks.map(w => ({
+      queryKey: ["leaderboard", "week", w.id],
+      queryFn: () => api.leaderboard.byWeek(w.id),
+      enabled: !!currentUser && tab === "overall" && !seasonNow,
+    })),
+  });
+  const boardsReady = weeklyBoards.length > 0 && weeklyBoards.every(q => q.data);
+  const seasonData =
+    seasonNow ? overallData
+    : boardsReady ? standingsThrough(overallData, weeklyBoards.map(q => q.data!), seasonIdx + 1)
+    : [];
+
   useEffect(() => {
     if (!currentUser) navigate("/");
   }, [currentUser, navigate]);
@@ -67,7 +91,7 @@ const Leaderboard = () => {
 
   const isLive = currentWeekData?.fixtures.some(f => f.status === "live");
   const isFinal = !!currentWeekData?.fixtures.every(f => f.status !== "pre_match" && f.status !== "live");
-  const displayData = tab === "overall" ? overallData : tab === "weekly" ? weeklyData : [];
+  const displayData = tab === "overall" ? seasonData : tab === "weekly" ? weeklyData : [];
   const top3 = displayData.slice(0, 3);
   const podiumOrder = top3.length >= 3 ? [top3[1], top3[0], top3[2]] : top3;
   const podiumHeights = ["h-20", "h-28", "h-16"];
@@ -115,6 +139,34 @@ const Leaderboard = () => {
 
         {tab === "champions" && <WeeklyChampions weeks={weeks} currentUserId={currentUser.id} />}
 
+        {/* Season table after an earlier week */}
+        {tab === "overall" && activeWeeks.length > 1 && (
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setSeasonIdx(Math.max(0, seasonIdx - 1))}
+              disabled={seasonIdx === 0}
+              className="p-1.5 rounded bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <div className="text-center">
+              <p className="text-sm font-semibold">
+                {seasonNow ? "Season so far" : `After ${weekLabel(activeWeeks[seasonIdx])}`}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {seasonNow ? "Step back to see the table after an earlier week" : "Points and positions as they stood then"}
+              </p>
+            </div>
+            <button
+              onClick={() => setSeasonIdx(seasonIdx + 1 >= activeWeeks.length - 1 ? null : seasonIdx + 1)}
+              disabled={seasonNow}
+              className="p-1.5 rounded bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+        )}
+
         {/* Week navigator */}
         {tab === "weekly" && activeWeeks.length > 0 && (
           <div className="flex items-center justify-between">
@@ -151,7 +203,8 @@ const Leaderboard = () => {
         )}
 
         {/* Podium */}
-        {top3.length >= 3 && (
+        {/* No podium until someone has scored: a row of zeros only shows the submission order. */}
+        {top3.length >= 3 && top3[0].totalPoints > 0 && (
           <div className="flex items-end justify-center gap-3 pt-4">
             {podiumOrder.map((entry, i) => {
               const isMe = entry.userId === currentUser.id;
@@ -221,7 +274,7 @@ const Leaderboard = () => {
               </div>
             );
           })}
-          {displayData.length === 0 && tab === "overall" && (
+          {displayData.length === 0 && tab === "overall" && seasonNow && (
             <div className="rounded-xl border border-border bg-card p-8 text-center">
               <Trophy className="mx-auto h-8 w-8 mb-2 text-muted-foreground opacity-50" />
               <p className="text-muted-foreground text-sm">No predictions submitted yet.</p>
