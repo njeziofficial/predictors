@@ -531,7 +531,7 @@ const AdminUsers = () => {
                       {format(new Date(u.createdAt), "MMM d, yyyy")}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
-                      {u.lastLoginAt ? format(new Date(u.lastLoginAt), "MMM d, HH:mm") : "Never"}
+                      {u.lastLoginAt ? format(new Date(u.lastLoginAt), "MMM d, h:mm a") : "Never"}
                     </TableCell>
                   </TableRow>
                 ))}

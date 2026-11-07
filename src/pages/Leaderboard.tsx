@@ -253,7 +253,7 @@ const Leaderboard = () => {
                       {entry.lastSubmittedAt && (
                         <>
                           <Clock className="h-3 w-3" />
-                          <span>{format(new Date(entry.lastSubmittedAt), "HH:mm")}</span>
+                          <span>{format(new Date(entry.lastSubmittedAt), "h:mm a")}</span>
                         </>
                       )}
                       {entry.correctScores > 0 && (

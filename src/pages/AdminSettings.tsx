@@ -321,7 +321,7 @@ const AdminSettings = () => {
                   }`}
                 >
                   {p.coolingUntil
-                    ? `Resting until ${format(new Date(p.coolingUntil), "HH:mm")}`
+                    ? `Resting until ${format(new Date(p.coolingUntil), "h:mm a")}`
                     : `${p.failures} failed ${p.failures === 1 ? "try" : "tries"}`}
                 </span>
                 {p.lastProblem && <span className="block text-xs text-muted-foreground mt-1">{p.lastProblem}</span>}
@@ -759,8 +759,8 @@ const AdminSettings = () => {
                         {wakeSchedule.nextWindow && (
                           <p>
                             {wakeSchedule.inWindow ? "This window" : "Next window"}:{" "}
-                            {format(new Date(wakeSchedule.nextWindow.start), "EEE d MMM, HH:mm")} –{" "}
-                            {format(new Date(wakeSchedule.nextWindow.end), "HH:mm")}
+                            {format(new Date(wakeSchedule.nextWindow.start), "EEE d MMM, h:mm a")} –{" "}
+                            {format(new Date(wakeSchedule.nextWindow.end), "h:mm a")}
                           </p>
                         )}
                         <p>

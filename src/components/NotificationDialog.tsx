@@ -42,7 +42,7 @@ const NotificationDialog = ({
               </div>
               <DialogTitle className="break-words pr-6 leading-snug">{item.title}</DialogTitle>
               <DialogDescription className="text-xs" title={format(new Date(item.createdAt), "PPpp")}>
-                {format(new Date(item.createdAt), "EEE d MMM yyyy, HH:mm")} ·{" "}
+                {format(new Date(item.createdAt), "EEE d MMM yyyy, h:mm a")} ·{" "}
                 {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
               </DialogDescription>
             </DialogHeader>

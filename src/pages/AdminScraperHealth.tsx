@@ -23,8 +23,8 @@ import { usePermissions } from "@/lib/permissions";
 
 type LogFilter = "all" | "warnings" | "errors";
 
-const at = (iso: string) => format(new Date(iso), "HH:mm:ss");
-const day = (iso: string) => format(new Date(iso), "EEE d MMM, HH:mm");
+const at = (iso: string) => format(new Date(iso), "h:mm:ss a");
+const day = (iso: string) => format(new Date(iso), "EEE d MMM, h:mm a");
 /** "3 min ago" / "in 4 min", measured from the server's clock. */
 const rel = (iso: string | null, now: string) => {
   if (!iso) return "never";
@@ -153,7 +153,7 @@ const AdminScraperHealth = () => {
             </h1>
             <p className="text-sm text-muted-foreground">
               What the live scraper is doing on the server answering this page. Times are in your time zone.
-              {dataUpdatedAt > 0 && ` Updated ${format(dataUpdatedAt, "HH:mm:ss")}, every 10 seconds.`}
+              {dataUpdatedAt > 0 && ` Updated ${format(dataUpdatedAt, "h:mm:ss a")}, every 10 seconds.`}
             </p>
           </div>
           <div className="flex gap-2">

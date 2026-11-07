@@ -96,7 +96,7 @@ const AdminAuditTrail = () => {
                   {entries.map((e) => (
                     <TableRow key={e.id}>
                       <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
-                        {format(new Date(e.createdAt), "MMM d, HH:mm:ss")}
+                        {format(new Date(e.createdAt), "MMM d, h:mm:ss a")}
                       </TableCell>
                       <TableCell>
                         <span

@@ -26,7 +26,7 @@ const resultText = (f: MarkingFixtureDto) =>
         ? "Postponed"
         : f.status === "cancelled"
           ? "Cancelled"
-          : format(new Date(f.kickoff), "EEE HH:mm");
+          : format(new Date(f.kickoff), "EEE h:mm a");
 
 const PickBadge = ({ pick }: { pick: MarkedPickDto }) => {
   if (!pick.outcome)
@@ -193,7 +193,7 @@ const AdminMarking = () => {
                 {data.reconciledAt ? (
                   <>
                     <p className="mt-1.5 text-lg font-semibold text-success">Signed off</p>
-                    <p className="text-xs text-muted-foreground">{format(new Date(data.reconciledAt), "EEE d MMM, HH:mm")}</p>
+                    <p className="text-xs text-muted-foreground">{format(new Date(data.reconciledAt), "EEE d MMM, h:mm a")}</p>
                   </>
                 ) : (
                   <>

@@ -538,7 +538,7 @@ const AdminFixtures = () => {
                         {fixture.homeTeam} vs {fixture.awayTeam}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
-                        {format(new Date(fixture.kickoff), "MMM d, HH:mm")}
+                        {format(new Date(fixture.kickoff), "MMM d, h:mm a")}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">{fixture.status}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">

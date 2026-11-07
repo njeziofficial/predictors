@@ -83,7 +83,7 @@ const ProfileBody = ({ profile }: { profile: UserProfileDto }) => {
           <div>
             <p className="text-xs text-muted-foreground">Last login</p>
             <p className="font-medium">
-              {profile.lastLoginAt ? format(new Date(profile.lastLoginAt), "MMM d, HH:mm") : "Never"}
+              {profile.lastLoginAt ? format(new Date(profile.lastLoginAt), "MMM d, h:mm a") : "Never"}
             </p>
           </div>
         </div>

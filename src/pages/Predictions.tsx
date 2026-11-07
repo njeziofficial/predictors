@@ -82,7 +82,7 @@ const CountdownTimer = ({ lockTime, label }: { lockTime: Date; label: string }) 
         <Lock className="h-4 w-4 text-primary shrink-0" />
         <div className="min-w-0">
           <p className="text-sm text-muted-foreground leading-tight">{label}</p>
-          <p className="text-[11px] text-muted-foreground/70 leading-tight">{format(lockTime, "EEE, MMM d · HH:mm")}</p>
+          <p className="text-[11px] text-muted-foreground/70 leading-tight">{format(lockTime, "EEE, MMM d · h:mm a")}</p>
         </div>
       </div>
       <div className="flex items-center gap-1.5" aria-label={`${days} days ${hours} hours ${mins} minutes ${secs} seconds`}>
@@ -135,7 +135,7 @@ const PickCard = ({
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-muted-foreground">
-          {format(new Date(fixture.kickoff), "EEE, MMM d")} · {format(new Date(fixture.kickoff), "HH:mm")}
+          {format(new Date(fixture.kickoff), "EEE, MMM d")} · {format(new Date(fixture.kickoff), "h:mm a")}
           {note && <span className="text-primary"> · {note}</span>}
         </span>
         {pick && (

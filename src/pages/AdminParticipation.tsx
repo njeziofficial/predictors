@@ -85,7 +85,7 @@ const AdminParticipation = () => {
 
   const lockAt = data?.nextKickoff ? new Date(new Date(data.nextKickoff).getTime() - LOCK_LEAD_MS) : null;
   const locked = !lockAt || lockAt.getTime() <= Date.now();
-  const deadline = lockAt ? format(lockAt, "EEE d MMM, HH:mm") : null;
+  const deadline = lockAt ? format(lockAt, "EEE d MMM, h:mm a") : null;
 
   const query = search.trim().toLowerCase();
   const visible = players.filter(
@@ -289,7 +289,7 @@ const AdminParticipation = () => {
                         {p.phoneNumber || "No phone number"}
                         {" · "}
                         {p.status === "done" && p.submittedAt
-                          ? `Submitted ${format(new Date(p.submittedAt), "EEE HH:mm")}`
+                          ? `Submitted ${format(new Date(p.submittedAt), "EEE h:mm a")}`
                           : p.lastLoginAt
                             ? `Last seen ${formatDistanceToNow(new Date(p.lastLoginAt), { addSuffix: true })}`
                             : "Never signed in"}

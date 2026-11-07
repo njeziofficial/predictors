@@ -122,7 +122,7 @@ export const totalUnread = (list: ConversationDto[] | undefined) =>
 export function formatListTime(iso: string, now = new Date()): string {
   const date = new Date(iso);
   const days = differenceInCalendarDays(now, date);
-  if (days <= 0) return format(date, "HH:mm");
+  if (days <= 0) return format(date, "h:mm a");
   if (days === 1) return "Yesterday";
   if (days < 7) return format(date, "EEE");
   return format(date, "dd/MM/yy");
