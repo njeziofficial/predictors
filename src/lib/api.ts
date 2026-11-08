@@ -327,6 +327,17 @@ export interface SpecialPrizeDto {
   paidAt: string | null;
 }
 
+// One player's score on a special game, for those who run them.
+export interface SpecialPickDto {
+  userId: string;
+  name: string;
+  whatsAppName: string | null;
+  homeGoals: number;
+  awayGoals: number;
+  // Once the match has ended.
+  correct: boolean;
+}
+
 export interface SpecialGameDto {
   fixtureId: string;
   weekName: string;
@@ -1320,6 +1331,7 @@ export const api = {
     },
     specialGames: {
       list: () => request<SpecialGameDto[]>("/api/admin/special-games"),
+      picks: (fixtureId: string) => request<SpecialPickDto[]>(`/api/admin/special-games/${encodeURIComponent(fixtureId)}/picks`),
       // Off: the players' tab is hidden and no new prizes are paid.
       enabled: () => request<{ enabled: boolean }>("/api/admin/special-games/enabled"),
       setEnabled: (enabled: boolean) =>

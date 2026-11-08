@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { CircleAlert, CircleCheck, Loader2, Sparkles } from "lucide-react";
+import { ChevronDown, CircleAlert, CircleCheck, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import AdminLayout from "@/components/AdminLayout";
 import CompetitionSwitcher from "@/components/CompetitionSwitcher";
@@ -186,6 +186,50 @@ const Winner = ({ game, prize, onSaved }: { game: SpecialGameDto; prize: Special
   );
 };
 
+/** Who predicted what, loaded when opened. */
+const Predictions = ({ game }: { game: SpecialGameDto }) => {
+  const [open, setOpen] = useState(false);
+  const { data: picks, isLoading, error } = useQuery({
+    queryKey: [...KEY, "picks", game.fixtureId],
+    queryFn: () => api.admin.specialGames.picks(game.fixtureId),
+    enabled: open,
+    refetchInterval: open ? 60_000 : false,
+  });
+
+  if (game.scorePicks === 0) return null;
+
+  return (
+    <div className="space-y-1">
+      <Button size="sm" variant="ghost" className="-ml-2" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <ChevronDown className={`mr-1.5 h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
+        {open ? "Hide predictions" : "See predictions"}
+      </Button>
+      {open &&
+        (isLoading ? (
+          <div className="flex justify-center py-4">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          </div>
+        ) : error ? (
+          <p className="py-2 text-sm text-muted-foreground">{errorMessage(error, "Couldn't load the predictions.")}</p>
+        ) : (
+          <ul className="divide-y divide-border border-t border-border">
+            {picks?.map((p) => (
+              <li key={p.userId} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate">{p.whatsAppName || p.name}</span>
+                  {p.correct && <CircleCheck className="h-4 w-4 shrink-0 text-success" aria-label="Correct" />}
+                </span>
+                <span className="shrink-0 font-semibold tabular-nums">
+                  {p.homeGoals}-{p.awayGoals}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ))}
+    </div>
+  );
+};
+
 const GameCard = ({ game, onSaved }: { game: SpecialGameDto; onSaved: OnSaved }) => {
   const [editing, setEditing] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -238,6 +282,8 @@ const GameCard = ({ game, onSaved }: { game: SpecialGameDto; onSaved: OnSaved })
           ))}
         </ul>
       )}
+
+      <Predictions game={game} />
 
       <div className="flex gap-2">
         <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
