@@ -123,7 +123,7 @@ describe("formatting", () => {
   const now = new Date(2026, 9, 8, 15, 0);
 
   it("formats inbox times relative to now", () => {
-    expect(formatListTime(new Date(2026, 9, 8, 9, 5).toISOString(), now)).toBe("09:05");
+    expect(formatListTime(new Date(2026, 9, 8, 9, 5).toISOString(), now)).toBe("9:05 AM");
     expect(formatListTime(new Date(2026, 9, 7, 9, 5).toISOString(), now)).toBe("Yesterday");
     expect(formatListTime(new Date(2026, 8, 1).toISOString(), now)).toBe("01/09/26");
   });

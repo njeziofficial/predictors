@@ -54,7 +54,7 @@ const NewGame = ({ taken, onSaved }: { taken: ReadonlySet<string>; onSaved: OnSa
     setSaving(true);
     try {
       onSaved(await api.admin.specialGames.setPot(fixtureId, kobo));
-      toast.success("Special game set", { description: "Players can now only predict its exact score." });
+      toast.success("Special game set", { description: "Players can predict its exact score on their Special games tab." });
       setFixtureId("");
       setAmount("");
     } catch (err) {
@@ -222,7 +222,6 @@ const GameCard = ({ game, onSaved }: { game: SpecialGameDto; onSaved: OnSaved })
 
       <p className="text-xs text-muted-foreground">
         {game.scorePicks === 1 ? "1 score predicted" : `${game.scorePicks} scores predicted`}
-        {game.outdatedPicks > 0 && ` · ${game.outdatedPicks} older result ${game.outdatedPicks === 1 ? "pick" : "picks"} can't win`}
         {ended && game.prizes.length === 0 && " · nobody got it, so the pot isn't paid"}
       </p>
 
@@ -255,7 +254,7 @@ const GameCard = ({ game, onSaved }: { game: SpecialGameDto; onSaved: OnSaved })
           <AlertDialogHeader>
             <AlertDialogTitle>Remove this special game?</AlertDialogTitle>
             <AlertDialogDescription>
-              {game.homeTeam} vs {game.awayTeam} goes back to a normal match. Prizes already in wallets are taken back; a prize
+              {game.homeTeam} vs {game.awayTeam} leaves the players' Special games tab. Prizes already in wallets are taken back; a prize
               marked as paid has to be marked as unpaid first.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -299,8 +298,8 @@ const Visibility = ({ enabled, onChange }: { enabled: boolean; onChange: (enable
         <p className="text-sm font-semibold">{enabled ? "Showing to players" : "Hidden from players"}</p>
         <p className="text-xs text-muted-foreground">
           {enabled
-            ? "Players see the pot on these matches and can only predict the exact score."
-            : "Off: these play as normal matches and no new prizes are paid. Prizes already in wallets stay, and can still be marked as paid."}
+            ? "Players see the Special games tab and can predict these matches there."
+            : "Off: no Special games tab for players and no new prizes. Prizes already in wallets stay, and can still be marked as paid."}
         </p>
       </div>
       <Switch aria-label="Show special games to players" checked={enabled} onCheckedChange={toggle} disabled={saving} />
@@ -339,8 +338,8 @@ const AdminSpecialGames = () => {
             <Sparkles className="h-6 w-6 text-primary" /> Special games
           </h1>
           <p className="text-sm text-muted-foreground">
-            Players can only predict the exact score. When the match ends, everyone who got it shares your pot equally in their
-            wallets, separate from the season pot. Mark each winner as paid once you've sent the money.
+            Players predict the exact score on their own tab, separate from normal predictions and the standings. When the match
+            ends, everyone who got it shares your pot equally in their wallets. Mark each winner as paid once you've sent the money.
           </p>
         </div>
 

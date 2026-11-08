@@ -9,7 +9,7 @@ import { POINTS } from "@/lib/constants";
 import { useLivePollInterval } from "@/lib/liveData";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Lock, Clock, Loader2, AlertTriangle, Info, Sparkles } from "lucide-react";
+import { Lock, Clock, Loader2, AlertTriangle, Info } from "lucide-react";
 import { BrandLoader } from "@/components/Brand";
 import NavBar from "@/components/NavBar";
 import { LatestChampions } from "@/components/WeeklyChampions";
@@ -29,13 +29,10 @@ import {
 import {
   DEFAULT_PREDICTION_RULES,
   isFixtureOpen,
-  isReplaceablePick,
   rescheduledPredictionState,
   weekPredictionState,
-  withoutReplaceablePicks,
   type PredictionRules,
 } from "@/lib/predictionRules";
-import { formatNaira } from "@/lib/wallet";
 import { OUTCOME_STYLES, outcomeLabel } from "@/lib/outcomeStyles";
 import { activeWeek, canGoToExtraTime, rescheduledFixtureIds, weekLabel } from "@/lib/weeks";
 import { useCompetition } from "@/context/CompetitionContext";
@@ -129,7 +126,6 @@ const PickCard = ({
   onScore: (field: "homeGoals" | "awayGoals", val: string) => void;
 }) => {
   const matchLocked = !isFixtureOpen(fixture, now);
-  const special = fixture.specialPotKobo != null;
   return (
     <div
       className={`rounded-xl border border-border bg-card p-4 space-y-3 transition-all duration-300 ${
@@ -155,16 +151,6 @@ const PickCard = ({
         )}
       </div>
 
-      {special && (
-        <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary">
-          <Sparkles className="h-3.5 w-3.5 shrink-0" />
-          <span>
-            <span className="font-semibold">Special game · {formatNaira(fixture.specialPotKobo!)} pot.</span> Exact score only. Everyone
-            who gets it shares the pot.
-          </span>
-        </div>
-      )}
-
       {/* Teams */}
       <div className="flex items-center justify-center gap-4">
         <div className="flex-1 text-right">
@@ -181,36 +167,34 @@ const PickCard = ({
       {/* Prediction buttons */}
       {editable && (
         <>
-          {!special && (
-            <div className="grid grid-cols-4 gap-2">
-              {outcomeOptions.map((outcome) => {
-                const style = OUTCOME_STYLES[outcome];
-                const selected = pick?.outcome === outcome;
-                return (
-                  <button
-                    key={outcome}
-                    onClick={() => onPick(outcome)}
-                    aria-pressed={selected}
-                    className={`flex flex-col items-center gap-0.5 py-2.5 rounded-lg border text-xs transition-all duration-200 ${
-                      selected
-                        ? `${style.solid} font-bold`
-                        : `border-border font-medium hover:border-foreground/30 ${
-                            pick ? "text-muted-foreground/60" : "text-muted-foreground"
-                          }`
-                    }`}
-                  >
-                    <span className="flex items-center gap-1">
-                      {!selected && <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />}
-                      {style.label}
-                    </span>
-                    <span className="text-[10px] opacity-80">+{POINTS[outcome]}pts</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <div className="grid grid-cols-4 gap-2">
+            {outcomeOptions.map((outcome) => {
+              const style = OUTCOME_STYLES[outcome];
+              const selected = pick?.outcome === outcome;
+              return (
+                <button
+                  key={outcome}
+                  onClick={() => onPick(outcome)}
+                  aria-pressed={selected}
+                  className={`flex flex-col items-center gap-0.5 py-2.5 rounded-lg border text-xs transition-all duration-200 ${
+                    selected
+                      ? `${style.solid} font-bold`
+                      : `border-border font-medium hover:border-foreground/30 ${
+                          pick ? "text-muted-foreground/60" : "text-muted-foreground"
+                        }`
+                  }`}
+                >
+                  <span className="flex items-center gap-1">
+                    {!selected && <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />}
+                    {style.label}
+                  </span>
+                  <span className="text-[10px] opacity-80">+{POINTS[outcome]}pts</span>
+                </button>
+              );
+            })}
+          </div>
 
-          {(special || pick?.outcome === "correct_score") && (
+          {pick?.outcome === "correct_score" && (
             <div className="flex items-center gap-2 justify-center fade-in-up">
               <span className="text-xs text-muted-foreground">{fixture.homeTeam}</span>
               <Input
@@ -218,7 +202,7 @@ const PickCard = ({
                 min={0}
                 className="w-14 h-8 text-center text-sm bg-secondary border-border"
                 placeholder="0"
-                value={pick?.homeGoals ?? ""}
+                value={pick.homeGoals ?? ""}
                 onChange={(e) => onScore("homeGoals", e.target.value)}
               />
               <span className="text-muted-foreground">-</span>
@@ -227,7 +211,7 @@ const PickCard = ({
                 min={0}
                 className="w-14 h-8 text-center text-sm bg-secondary border-border"
                 placeholder="0"
-                value={pick?.awayGoals ?? ""}
+                value={pick.awayGoals ?? ""}
                 onChange={(e) => onScore("awayGoals", e.target.value)}
               />
               <span className="text-xs text-muted-foreground">{fixture.awayTeam}</span>
@@ -258,7 +242,7 @@ const RescheduledMatches = ({
   now: Date;
 }) => {
   const queryClient = useQueryClient();
-  const [storedPicks, setPicks] = useState<Record<string, Pick>>({});
+  const [picks, setPicks] = useState<Record<string, Pick>>({});
   const [pendingSubmit, setPendingSubmit] = useState<PredictionItem[] | null>(null);
 
   const { data: allPreds } = useQuery({
@@ -279,13 +263,7 @@ const RescheduledMatches = ({
 
   const fixtures = weeks.flatMap((w) => w.fixtures.filter((f) => fixtureIds.has(f.id)));
   const weekOf = new Map(weeks.flatMap((w) => w.fixtures.filter((f) => fixtureIds.has(f.id)).map((f) => [f.id, w])));
-  const fixtureById = new Map(fixtures.map((f) => [f.id, f]));
-  const picks = withoutReplaceablePicks(storedPicks, fixtures, now);
-  const savedIds = new Set(
-    (allPreds ?? [])
-      .filter((p) => fixtureIds.has(p.fixtureId) && !isReplaceablePick(fixtureById.get(p.fixtureId), p.outcome, now))
-      .map((p) => p.fixtureId),
-  );
+  const savedIds = new Set((allPreds ?? []).map((p) => p.fixtureId).filter((id) => fixtureIds.has(id)));
   const state = rescheduledPredictionState(fixtures, savedIds, rules, globalLocked, now);
   const hasSaved = state.openFixtures.some((f) => savedIds.has(f.id));
 
@@ -409,7 +387,7 @@ const Predictions = () => {
   const queryClient = useQueryClient();
 
   const [selectedWeekId, setSelectedWeekId] = useState<string>("");
-  const [storedPicks, setPicks] = useState<Record<string, Pick>>({});
+  const [picks, setPicks] = useState<Record<string, Pick>>({});
   const [now, setNow] = useState(() => new Date());
   // The submission waiting on the warning prompt (final and/or incomplete predictions).
   const [pendingSubmit, setPendingSubmit] = useState<PredictionItem[] | null>(null);
@@ -549,20 +527,9 @@ const Predictions = () => {
   const globalLocked = !!lockStatus?.locked;
   const regular = (w: MatchWeekDto) => w.fixtures.filter((f) => !rescheduled.has(f.id));
   const rescheduledOpen = weeks.some((w) => w.fixtures.some((f) => rescheduled.has(f.id) && isFixtureOpen(f, now)));
-  const picks = withoutReplaceablePicks(storedPicks, selectedWeek.fixtures, now);
   const savedIds = new Set((existingPreds ?? []).map((p) => p.fixtureId).filter((id) => !rescheduled.has(id)));
   const hasSubmitted = savedIds.size > 0;
-  const fixtureById = new Map(selectedWeek.fixtures.map((f) => [f.id, f]));
-  // Saved picks still counting as final: one waiting to be replaced with a score doesn't.
-  const finalIds = new Set(
-    (existingPreds ?? [])
-      .filter((p) => savedIds.has(p.fixtureId) && !isReplaceablePick(fixtureById.get(p.fixtureId), p.outcome, now))
-      .map((p) => p.fixtureId),
-  );
-  const baseWeekState = weekPredictionState(regular(selectedWeek), savedIds, rules, globalLocked, now);
-  const weekState = baseWeekState.lockReason
-    ? baseWeekState
-    : { ...baseWeekState, editableIds: weekPredictionState(regular(selectedWeek), finalIds, rules, globalLocked, now).editableIds };
+  const weekState = weekPredictionState(regular(selectedWeek), savedIds, rules, globalLocked, now);
   const locked = weekState.lockReason !== null;
   const sortedFixtures = [...selectedWeek.fixtures].sort(
     (a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime()
@@ -772,7 +739,7 @@ const Predictions = () => {
               {group.fixtures.map((fixture, mi) => {
                 const pick = picks[fixture.id];
                 const editable = weekState.editableIds.has(fixture.id);
-                const savedFinal = rules.predictionsFinal && finalIds.has(fixture.id);
+                const savedFinal = rules.predictionsFinal && savedIds.has(fixture.id);
 
                 return (
                   <PickCard

@@ -1,4 +1,4 @@
-import type { FixtureDto, OutcomeType } from "@/lib/api";
+import type { FixtureDto } from "@/lib/api";
 
 /**
  * How players may predict, set by the system admin (or admins given "Change prediction rules").
@@ -36,23 +36,6 @@ export const isFixtureOpen = (f: FixtureDto, now: Date) => f.status === "pre_mat
 /** Any match of the week has kicked off (or is within the lock lead of it). */
 export const hasWeekStarted = (fixtures: FixtureDto[], now: Date) =>
   fixtures.some((f) => isPlayable(f) && (f.status !== "pre_match" || now >= fixtureLockTime(f)));
-
-/**
- * A pick made before its match was made special, while the match is still open. It can't win the
- * pot, so the player is asked for a score instead, even when predictions are otherwise final.
- */
-export const isReplaceablePick = (fixture: FixtureDto | undefined, outcome: OutcomeType, now: Date) =>
-  fixture?.specialPotKobo != null && outcome !== "correct_score" && isFixtureOpen(fixture, now);
-
-/** The picks to show and submit: those waiting to be replaced count as not yet made. */
-export function withoutReplaceablePicks<T extends { outcome: OutcomeType }>(
-  picks: Record<string, T>,
-  fixtures: FixtureDto[],
-  now: Date,
-): Record<string, T> {
-  const byId = new Map(fixtures.map((f) => [f.id, f]));
-  return Object.fromEntries(Object.entries(picks).filter(([id, p]) => !isReplaceablePick(byId.get(id), p.outcome, now)));
-}
 
 export type WeekLockReason = "admin" | "week_started" | "all_started";
 

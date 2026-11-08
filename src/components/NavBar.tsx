@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ClipboardList, Trophy, Radio, Clock, User, LogOut, LayoutDashboard, MessageCircle, Wallet, Award } from "lucide-react";
+import { ClipboardList, Trophy, Radio, Clock, User, LogOut, LayoutDashboard, MessageCircle, Wallet, Award, Sparkles } from "lucide-react";
 import { BrandLogo } from "@/components/Brand";
 import NotificationBell from "@/components/NotificationBell";
 import CompetitionSwitcher from "@/components/CompetitionSwitcher";
@@ -14,6 +14,7 @@ import { api } from "@/lib/api";
 const navItems = [
   { path: "/predict", label: "Predict", icon: ClipboardList },
   { path: "/ballon-dor", label: "Ballon d'Or", icon: Award },
+  { path: "/special-games", label: "Special games", icon: Sparkles },
   { path: "/leaderboard", label: "Standings", icon: Trophy },
   { path: "/status", label: "Live", icon: Radio },
   { path: "/dashboard", label: "History", icon: Clock },
@@ -47,7 +48,16 @@ const NavBar = () => {
     enabled: !!currentUser,
     staleTime: 60_000,
   });
-  const items = navItems.filter((item) => item.path !== "/ballon-dor" || !!ballonDor);
+  // The same for Special games: no game to show, or switched off.
+  const { data: specialGames } = useQuery({
+    queryKey: ["special-games"],
+    queryFn: () => api.specialGames.get(),
+    enabled: !!currentUser,
+    staleTime: 60_000,
+  });
+  const items = navItems.filter(
+    (item) => (item.path !== "/ballon-dor" || !!ballonDor) && (item.path !== "/special-games" || !!specialGames?.length),
+  );
 
   return (
     <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">

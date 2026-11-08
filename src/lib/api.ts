@@ -45,8 +45,6 @@ export interface FixtureDto {
   // Knockout matches that went to extra time: the score after it. finalScore stays the score
   // after 90 minutes, which is what predictions are marked on.
   afterExtraTime?: ScoreDto | null;
-  // A special game: only its exact score can be predicted, and those who get it share this pot.
-  specialPotKobo?: number | null;
 }
 
 export interface MatchWeekDto {
@@ -300,6 +298,25 @@ export interface WalletEntryDto {
   prizePaidAt?: string | null;
 }
 
+// One game on a player's Special games tab. Other players' scores are never sent.
+export interface PlayerSpecialGameDto {
+  fixtureId: string;
+  competition: string;
+  weekName: string;
+  homeTeam: string;
+  awayTeam: string;
+  kickoff: string;
+  status: FixtureStatus;
+  finalScore: ScoreDto | null;
+  potKobo: number;
+  open: boolean;
+  entries: number;
+  myHomeGoals: number | null;
+  myAwayGoals: number | null;
+  winners: number;
+  myPrizeKobo: number | null;
+}
+
 // Special games ("Run special games"). Amounts in kobo.
 export interface SpecialPrizeDto {
   userId: string;
@@ -321,8 +338,6 @@ export interface SpecialGameDto {
   finalScore: ScoreDto | null;
   potKobo: number;
   scorePicks: number;
-  // Picks made before the match was made special: they can't win the pot.
-  outdatedPicks: number;
   // Why the wallets couldn't follow the latest result or pot, until the admin acts.
   problem: string | null;
   prizes: SpecialPrizeDto[];
@@ -1046,6 +1061,16 @@ export const api = {
     remove: (id: string) => request<void>(`/api/passkeys/${encodeURIComponent(id)}`, { method: "DELETE" }),
   },
 
+  // The Special games tab: none means no game to show, or switched off.
+  specialGames: {
+    get: () => request<PlayerSpecialGameDto[] | undefined>("/api/special-games").then((g) => g ?? []),
+    submit: (fixtureId: string, homeGoals: number, awayGoals: number) =>
+      request<PlayerSpecialGameDto[]>(`/api/special-games/${encodeURIComponent(fixtureId)}/pick`, {
+        method: "PUT",
+        body: JSON.stringify({ homeGoals, awayGoals }),
+      }),
+  },
+
   // The player's own wallet: paid or not, winnings, payouts, and the pot.
   wallet: {
     get: (season?: string) => request<MyWalletDto>(`/api/wallet${season ? `?season=${encodeURIComponent(season)}` : ""}`),
@@ -1295,7 +1320,7 @@ export const api = {
     },
     specialGames: {
       list: () => request<SpecialGameDto[]>("/api/admin/special-games"),
-      // Off: players see them as ordinary matches and no new prizes are paid.
+      // Off: the players' tab is hidden and no new prizes are paid.
       enabled: () => request<{ enabled: boolean }>("/api/admin/special-games/enabled"),
       setEnabled: (enabled: boolean) =>
         request<{ enabled: boolean }>("/api/admin/special-games/enabled", { method: "PUT", body: JSON.stringify({ enabled }) }),

@@ -1,10 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   DEFAULT_PREDICTION_RULES,
-  isReplaceablePick,
   rescheduledPredictionState,
   weekPredictionState,
-  withoutReplaceablePicks,
   type PredictionRules,
 } from "@/lib/predictionRules";
 import type { FixtureDto, FixtureStatus } from "@/lib/api";
@@ -32,24 +30,6 @@ const notStartedWeek = [fixture("f1", "2026-10-09T19:00:00Z"), fixture("f2", "20
 
 const rules = (r: Partial<PredictionRules>): PredictionRules => ({ ...DEFAULT_PREDICTION_RULES, ...r });
 const none = new Set<string>();
-
-describe("special games", () => {
-  const special = { ...fixture("s1", "2026-10-09T19:00:00Z"), specialPotKobo: 1000000 };
-  const started = { ...fixture("s2", "2026-10-09T17:00:00Z", "live"), specialPotKobo: 1000000 };
-  const normal = fixture("n1", "2026-10-09T19:00:00Z");
-
-  it("asks for a score in place of a result pick while the match is open", () => {
-    expect(isReplaceablePick(special, "home_win", NOW)).toBe(true);
-    expect(isReplaceablePick(special, "correct_score", NOW)).toBe(false);
-    expect(isReplaceablePick(normal, "home_win", NOW)).toBe(false);
-    expect(isReplaceablePick(started, "home_win", NOW)).toBe(false);
-  });
-
-  it("treats a pick waiting to be replaced as not yet made", () => {
-    const picks = { s1: { outcome: "draw" as const }, n1: { outcome: "draw" as const }, s2: { outcome: "draw" as const } };
-    expect(Object.keys(withoutReplaceablePicks(picks, [special, normal, started], NOW)).sort()).toEqual(["n1", "s2"]);
-  });
-});
 
 describe("weekPredictionState", () => {
   it("by default locks each match at its own kickoff", () => {
