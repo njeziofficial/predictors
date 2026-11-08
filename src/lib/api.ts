@@ -45,6 +45,8 @@ export interface FixtureDto {
   // Knockout matches that went to extra time: the score after it. finalScore stays the score
   // after 90 minutes, which is what predictions are marked on.
   afterExtraTime?: ScoreDto | null;
+  // A special game: only its exact score can be predicted, and those who get it share this pot.
+  specialPotKobo?: number | null;
 }
 
 export interface MatchWeekDto {
@@ -292,6 +294,37 @@ export interface WalletEntryDto {
   reversesEntryId: string | null;
   // On an entry that has been reversed.
   reversed: boolean;
+  // On a special game prize: "owed" until the organiser marks it as "paid", and when they did.
+  prizeStatus?: "owed" | "paid" | null;
+  prizePaidAt?: string | null;
+}
+
+// Special games (system admin only). Amounts in kobo.
+export interface SpecialPrizeDto {
+  userId: string;
+  name: string;
+  whatsAppName: string | null;
+  amountKobo: number;
+  paid: boolean;
+  paidAt: string | null;
+}
+
+export interface SpecialGameDto {
+  fixtureId: string;
+  weekName: string;
+  competition: string;
+  homeTeam: string;
+  awayTeam: string;
+  kickoff: string;
+  status: FixtureStatus;
+  finalScore: ScoreDto | null;
+  potKobo: number;
+  scorePicks: number;
+  // Picks made before the match was made special: they can't win the pot.
+  outdatedPicks: number;
+  // Why the wallets couldn't follow the latest result or pot, until the admin acts.
+  problem: string | null;
+  prizes: SpecialPrizeDto[];
 }
 
 export interface MyWalletDto {
@@ -1258,6 +1291,21 @@ export const api = {
       // Shows the game to players or hides it. System user only.
       setEnabled: (year: number, enabled: boolean) =>
         request<BallonDorDto>(`/api/admin/ballon-dor/${year}/enabled`, { method: "PUT", body: JSON.stringify({ enabled }) }),
+    },
+    specialGames: {
+      list: () => request<SpecialGameDto[]>("/api/admin/special-games"),
+      setPot: (fixtureId: string, potKobo: number) =>
+        request<SpecialGameDto[]>(`/api/admin/special-games/${encodeURIComponent(fixtureId)}`, {
+          method: "PUT",
+          body: JSON.stringify({ potKobo }),
+        }),
+      remove: (fixtureId: string) =>
+        request<SpecialGameDto[]>(`/api/admin/special-games/${encodeURIComponent(fixtureId)}`, { method: "DELETE" }),
+      setPaid: (fixtureId: string, userId: string, paid: boolean) =>
+        request<SpecialGameDto[]>(
+          `/api/admin/special-games/${encodeURIComponent(fixtureId)}/prizes/${encodeURIComponent(userId)}/paid`,
+          { method: "PUT", body: JSON.stringify({ paid }) },
+        ),
     },
     email: {
       status: () => request<EmailStatusDto>("/api/admin/email/status"),

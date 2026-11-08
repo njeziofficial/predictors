@@ -22,7 +22,7 @@ import { useApp } from "@/context/AppContext";
 import { api, type AdminWalletDto, type WalletEntryDto, type WalletKind, type WalletPlayerDto } from "@/lib/api";
 import { usePermissions } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
-import { formatNaira, KIND_LABEL, parseNaira } from "@/lib/wallet";
+import { formatNaira, isSpecialGameEntry, KIND_LABEL, parseNaira } from "@/lib/wallet";
 
 type Filter = "all" | "unpaid" | "paid" | "owed";
 type RecordKind = Exclude<WalletKind, "entry_fee">;
@@ -343,7 +343,7 @@ const LedgerDialog = ({
   const queryClient = useQueryClient();
   // Undoing an entry fee is marking the player unpaid: the system admin's call.
   const canReverse = (e: WalletEntryDto) =>
-    canManage && !e.reversed && !e.reversesEntryId && (e.kind !== "entry_fee" || isSystemUser);
+    canManage && !e.reversed && !e.reversesEntryId && !isSpecialGameEntry(e) && (e.kind !== "entry_fee" || isSystemUser);
   const key = ["admin-wallet-player", player.userId, season];
   const { data, isLoading, error } = useQuery({ queryKey: key, queryFn: () => api.admin.wallet.player(player.userId, season) });
   const [reversing, setReversing] = useState<WalletEntryDto | null>(null);

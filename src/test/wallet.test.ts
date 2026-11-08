@@ -47,6 +47,13 @@ describe("parseNaira", () => {
 });
 
 describe("describeEntry", () => {
+  it("names special game prizes but keeps their payouts as bank payments", () => {
+    const prize = { kind: "adjustment" as const, amountKobo: 500000, note: "Special game: Real vs Barca ended 2-1 (₦10,000 shared by 2)" };
+    expect(describeEntry(entry(prize))).toBe("Special game prize");
+    expect(describeEntry(entry({ ...prize, amountKobo: -500000, reversesEntryId: "e0" }))).toBe("Special game prize reversed");
+    expect(describeEntry(entry({ kind: "payout", amountKobo: -500000, note: "Special game: Real vs Barca" }))).toBe("Paid to your bank");
+  });
+
   it("says what each entry means to the player", () => {
     expect(describeEntry(entry())).toBe("Entry fee paid");
     expect(describeEntry(entry({ kind: "payout", amountKobo: -500000 }))).toBe("Paid to your bank");

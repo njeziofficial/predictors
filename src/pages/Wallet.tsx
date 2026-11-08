@@ -33,6 +33,16 @@ const EntryRow = ({ entry }: { entry: WalletEntryDto }) => {
           {entry.note && <> · {entry.note}</>}
           {struck && <> · reversed</>}
         </p>
+        {entry.prizeStatus === "paid" && (
+          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-medium text-success">
+            <CircleCheck className="h-3 w-3" /> Paid{entry.prizePaidAt && ` ${format(new Date(entry.prizePaidAt), "d MMM yyyy")}`}
+          </span>
+        )}
+        {entry.prizeStatus === "owed" && (
+          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-medium text-warning">
+            <CircleAlert className="h-3 w-3" /> Awaiting payment
+          </span>
+        )}
       </div>
       <span
         className={cn(

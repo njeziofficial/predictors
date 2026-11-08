@@ -72,7 +72,7 @@ For `wrangler dev`, `.dev.vars` (gitignored) overrides `BACKEND_URL`.
 - **Push notifications** are off on the NestJS stack (`PUSH_DELIVERY: "off"`), because its
   database copy holds players' real phone subscriptions. Turn it on only once it's the live
   backend.
-- **Not on NestJS yet** (its phase 5): the wallet, fingerprint/face sign-in, emails and
+- **Not on NestJS yet** (its phase 5): the wallet, special games, fingerprint/face sign-in, emails and
   WhatsApp/SMS reminders. Those pages show errors while the frontend points at NestJS.
 
 ## Quick check after switching
