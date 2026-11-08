@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Loader2, Lock, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import NavBar from "@/components/NavBar";
+import CountdownTimer from "@/components/CountdownTimer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useApp } from "@/context/AppContext";
 import { api, type PlayerSpecialGameDto } from "@/lib/api";
+import { KICKOFF_LOCK_LEAD_MS } from "@/lib/predictionRules";
 import { formatNaira } from "@/lib/wallet";
 
 const KEY = ["special-games"];
@@ -99,29 +101,39 @@ const Outcome = ({ game }: { game: PlayerSpecialGameDto }) => {
   );
 };
 
-const GameCard = ({ game, onSaved }: { game: PlayerSpecialGameDto; onSaved: (games: PlayerSpecialGameDto[]) => void }) => (
-  <div className="space-y-4 rounded-xl border border-primary/30 bg-card p-4">
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <p className="font-semibold">
-          {game.homeTeam} vs {game.awayTeam}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {game.competition} · {format(new Date(game.kickoff), "EEE d MMM, h:mm a")}
-        </p>
+const GameCard = ({ game, onSaved }: { game: PlayerSpecialGameDto; onSaved: (games: PlayerSpecialGameDto[]) => void }) => {
+  const lockTime = useMemo(() => new Date(new Date(game.kickoff).getTime() - KICKOFF_LOCK_LEAD_MS), [game.kickoff]);
+  // Closes the moment the countdown ends, rather than at the next refresh. The server has the final say.
+  const [elapsed, setElapsed] = useState(false);
+  const open = game.open && !elapsed;
+
+  return (
+    <div className="space-y-4 rounded-xl border border-primary/30 bg-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-semibold">
+            {game.homeTeam} vs {game.awayTeam}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {game.competition} · {format(new Date(game.kickoff), "EEE d MMM, h:mm a")}
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-lg font-bold tabular-nums text-primary">{formatNaira(game.potKobo)}</p>
+          <p className="text-[11px] text-muted-foreground">{game.entries === 1 ? "1 player in" : `${game.entries} players in`}</p>
+        </div>
       </div>
-      <div className="shrink-0 text-right">
-        <p className="text-lg font-bold tabular-nums text-primary">{formatNaira(game.potKobo)}</p>
-        <p className="text-[11px] text-muted-foreground">{game.entries === 1 ? "1 player in" : `${game.entries} players in`}</p>
-      </div>
+      {open ? (
+        <>
+          <CountdownTimer lockTime={lockTime} label="Locks in" onElapsed={() => setElapsed(true)} />
+          <ScoreForm key={`${game.myHomeGoals}-${game.myAwayGoals}`} game={game} onSaved={onSaved} />
+        </>
+      ) : (
+        <Outcome game={game} />
+      )}
     </div>
-    {game.open ? (
-      <ScoreForm key={`${game.myHomeGoals}-${game.myAwayGoals}`} game={game} onSaved={onSaved} />
-    ) : (
-      <Outcome game={game} />
-    )}
-  </div>
-);
+  );
+};
 
 const SpecialGames = () => {
   const { currentUser } = useApp();
@@ -170,7 +182,7 @@ const SpecialGames = () => {
             {error instanceof Error ? error.message : "Couldn't load special games."}
           </p>
         ) : (
-          games?.map((g) => <GameCard key={g.fixtureId} game={g} onSaved={(next) => queryClient.setQueryData(KEY, next)} />)
+          games?.map((g) => <GameCard key={`${g.fixtureId}-${g.kickoff}`} game={g} onSaved={(next) => queryClient.setQueryData(KEY, next)} />)
         )}
       </div>
     </div>
