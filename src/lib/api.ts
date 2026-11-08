@@ -268,6 +268,7 @@ export type Permission =
   | "notifications.send"
   | "wallet.view"
   | "wallet.manage"
+  | "special_games.manage"
   | "security.idle_timeout";
 
 export interface IdleTimeoutDto {
@@ -299,7 +300,7 @@ export interface WalletEntryDto {
   prizePaidAt?: string | null;
 }
 
-// Special games (system admin only). Amounts in kobo.
+// Special games ("Run special games"). Amounts in kobo.
 export interface SpecialPrizeDto {
   userId: string;
   name: string;
@@ -1294,6 +1295,10 @@ export const api = {
     },
     specialGames: {
       list: () => request<SpecialGameDto[]>("/api/admin/special-games"),
+      // Off: players see them as ordinary matches and no new prizes are paid.
+      enabled: () => request<{ enabled: boolean }>("/api/admin/special-games/enabled"),
+      setEnabled: (enabled: boolean) =>
+        request<{ enabled: boolean }>("/api/admin/special-games/enabled", { method: "PUT", body: JSON.stringify({ enabled }) }),
       setPot: (fixtureId: string, potKobo: number) =>
         request<SpecialGameDto[]>(`/api/admin/special-games/${encodeURIComponent(fixtureId)}`, {
           method: "PUT",

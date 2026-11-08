@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WalletEntryDto } from "@/lib/api";
-import { describeEntry, formatNaira, parseNaira } from "@/lib/wallet";
+import { describeEntry, formatNaira, groupNairaInput, parseNaira } from "@/lib/wallet";
 
 const entry = (over: Partial<WalletEntryDto> = {}): WalletEntryDto => ({
   id: "e1",
@@ -43,6 +43,27 @@ describe("parseNaira", () => {
     expect(parseNaira("")).toBeNull();
     expect(parseNaira("three thousand")).toBeNull();
     expect(parseNaira("1.234")).toBeNull();
+  });
+});
+
+describe("groupNairaInput", () => {
+  it("adds commas as an amount is typed", () => {
+    expect(groupNairaInput("5000")).toBe("5,000");
+    expect(groupNairaInput("1234567")).toBe("1,234,567");
+    expect(groupNairaInput("999")).toBe("999");
+    expect(groupNairaInput("5,0000")).toBe("50,000");
+    expect(groupNairaInput("")).toBe("");
+  });
+
+  it("keeps decimals, a minus and what's still being typed", () => {
+    expect(groupNairaInput("1250.")).toBe("1,250.");
+    expect(groupNairaInput("1250.505")).toBe("1,250.50");
+    expect(groupNairaInput("-2000")).toBe("-2,000");
+    expect(groupNairaInput("0.5")).toBe("0.5");
+  });
+
+  it("gives back what parseNaira reads", () => {
+    expect(parseNaira(groupNairaInput("1250000.75"))).toBe(125000075);
   });
 });
 

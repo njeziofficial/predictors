@@ -5,6 +5,7 @@ import { Award, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import AdminLayout from "@/components/AdminLayout";
 import BallonDorBoard from "@/components/BallonDorBoard";
+import NairaInput from "@/components/NairaInput";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,7 +53,7 @@ const Setup = ({ game, canManage, onSaved }: { game?: BallonDorDto; canManage: b
     const winnerPotKobo = parseNaira(winnerPot);
     const topFivePotKobo = parseNaira(topFivePot);
     if (winnerPotKobo === null || topFivePotKobo === null) {
-      toast.error("Enter the prizes in naira, like 2500.");
+      toast.error("Enter the prizes in naira, like 2,500.");
       return;
     }
     setSaving(true);
@@ -90,11 +91,11 @@ const Setup = ({ game, canManage, onSaved }: { game?: BallonDorDto; canManage: b
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="bd-winner">Prize for the winner (₦)</Label>
-          <Input id="bd-winner" inputMode="decimal" value={winnerPot} disabled={fixed} onChange={(e) => setWinnerPot(e.target.value)} />
+          <NairaInput id="bd-winner" value={winnerPot} disabled={fixed} onValueChange={setWinnerPot} />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="bd-top5">Prize for the top 5 in order (₦)</Label>
-          <Input id="bd-top5" inputMode="decimal" value={topFivePot} disabled={fixed} onChange={(e) => setTopFivePot(e.target.value)} />
+          <NairaInput id="bd-top5" value={topFivePot} disabled={fixed} onValueChange={setTopFivePot} />
         </div>
       </div>
       <div className="space-y-1.5">

@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { CircleAlert, CircleCheck, History, Loader2, MoreHorizontal, Search, Settings2, Wallet as WalletIcon } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
+import NairaInput from "@/components/NairaInput";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -283,15 +284,8 @@ const RecordDialog = ({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="record-amount">Amount (₦)</Label>
-              <Input
-                id="record-amount"
-                inputMode="decimal"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="5000"
-                autoFocus
-              />
-              {amount && kobo === null && <p className="text-xs text-destructive">Enter an amount like 5000 or 1250.50.</p>}
+              <NairaInput id="record-amount" value={amount} onValueChange={setAmount} placeholder="5,000" autoFocus />
+              {amount && kobo === null && <p className="text-xs text-destructive">Enter an amount like 5,000 or 1,250.50.</p>}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="record-day">Date</Label>
@@ -481,7 +475,7 @@ const SeasonDialog = ({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="wallet-fee">Entry fee (₦)</Label>
-            <Input id="wallet-fee" inputMode="decimal" value={fee} onChange={(e) => setFee(e.target.value)} />
+            <NairaInput id="wallet-fee" value={fee} onValueChange={setFee} />
           </div>
         </div>
         <DialogFooter>

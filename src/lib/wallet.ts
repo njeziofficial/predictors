@@ -15,6 +15,15 @@ export function parseNaira(input: string): number | null {
   return Math.round(Number(cleaned) * 100);
 }
 
+/** An amount as it's being typed, with thousands commas: "5000.5" becomes "5,000.5". Keeps a minus and an unfinished decimal. */
+export function groupNairaInput(input: string): string {
+  const cleaned = input.replace(/[^\d.-]/g, "");
+  const [whole, ...decimals] = cleaned.replace(/-/g, "").split(".");
+  const grouped = whole.replace(/^0+(?=\d)/, "").replace(/\B(?=(\d{3})+$)/g, ",");
+  const decimal = cleaned.includes(".") ? `.${decimals.join("").slice(0, 2)}` : "";
+  return `${cleaned.startsWith("-") ? "-" : ""}${grouped}${decimal}`;
+}
+
 export const KIND_LABEL: Record<WalletKind, string> = {
   entry_fee: "Entry fee",
   winnings: "Winnings",

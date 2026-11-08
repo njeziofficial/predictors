@@ -5,6 +5,7 @@ import { CircleAlert, CircleCheck, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import AdminLayout from "@/components/AdminLayout";
 import CompetitionSwitcher from "@/components/CompetitionSwitcher";
+import NairaInput from "@/components/NairaInput";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,9 +18,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useCompetition } from "@/context/CompetitionContext";
 import { api, type SpecialGameDto, type SpecialPrizeDto } from "@/lib/api";
 import { usePermissions } from "@/lib/permissions";
@@ -27,13 +28,14 @@ import { isFixtureOpen } from "@/lib/predictionRules";
 import { formatNaira, parseNaira } from "@/lib/wallet";
 
 const KEY = ["admin-special-games"];
+const VISIBILITY_KEY = ["admin-special-games-enabled"];
 const errorMessage = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 const when = (iso: string) => format(new Date(iso), "EEE d MMM, h:mm a");
 
 type OnSaved = (games: SpecialGameDto[]) => void;
 
 /** Picks an upcoming match of the competition being viewed and puts a pot on it. */
-const NewGame = ({ onSaved }: { onSaved: OnSaved }) => {
+const NewGame = ({ taken, onSaved }: { taken: ReadonlySet<string>; onSaved: OnSaved }) => {
   const { selectWeeks } = useCompetition("admin");
   const { data: weeks } = useQuery({ queryKey: ["weeks"], queryFn: api.weeks.list, select: selectWeeks });
   const [fixtureId, setFixtureId] = useState("");
@@ -42,7 +44,7 @@ const NewGame = ({ onSaved }: { onSaved: OnSaved }) => {
   const now = new Date();
   const upcoming = (weeks ?? [])
     .flatMap((w) => w.fixtures.map((f) => ({ ...f, weekName: w.name })))
-    .filter((f) => isFixtureOpen(f, now) && f.specialPotKobo == null)
+    .filter((f) => isFixtureOpen(f, now) && !taken.has(f.id))
     .sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime());
   const kobo = parseNaira(amount);
   const chosen = upcoming.some((f) => f.id === fixtureId);
@@ -84,10 +86,10 @@ const NewGame = ({ onSaved }: { onSaved: OnSaved }) => {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="special-pot">Pot (₦)</Label>
-          <Input id="special-pot" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="10000" />
+          <NairaInput id="special-pot" value={amount} onValueChange={setAmount} placeholder="10,000" />
         </div>
       </div>
-      {amount && (kobo === null || kobo <= 0) && <p className="text-xs text-destructive">Enter an amount like 10000 or 1250.50.</p>}
+      {amount && (kobo === null || kobo <= 0) && <p className="text-xs text-destructive">Enter an amount like 10,000 or 1,250.50.</p>}
       <Button disabled={saving || !chosen || !kobo || kobo <= 0} onClick={save}>
         {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Set as special
       </Button>
@@ -125,7 +127,7 @@ const PotDialog = ({ game, onClose, onSaved }: { game: SpecialGameDto; onClose: 
         </DialogHeader>
         <div className="space-y-1.5">
           <Label htmlFor="edit-pot">Pot (₦)</Label>
-          <Input id="edit-pot" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
+          <NairaInput id="edit-pot" value={amount} onValueChange={setAmount} autoFocus />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>
@@ -275,14 +277,51 @@ const GameCard = ({ game, onSaved }: { game: SpecialGameDto; onSaved: OnSaved })
   );
 };
 
+// Whether players see special games at all.
+const Visibility = ({ enabled, onChange }: { enabled: boolean; onChange: (enabled: boolean) => void }) => {
+  const [saving, setSaving] = useState(false);
+
+  const toggle = async (on: boolean) => {
+    setSaving(true);
+    try {
+      onChange((await api.admin.specialGames.setEnabled(on)).enabled);
+      toast.success(on ? "Special games are showing to players" : "Special games are hidden from players");
+    } catch (err) {
+      toast.error(errorMessage(err, "Couldn't change it."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card p-4">
+      <div>
+        <p className="text-sm font-semibold">{enabled ? "Showing to players" : "Hidden from players"}</p>
+        <p className="text-xs text-muted-foreground">
+          {enabled
+            ? "Players see the pot on these matches and can only predict the exact score."
+            : "Off: these play as normal matches and no new prizes are paid. Prizes already in wallets stay, and can still be marked as paid."}
+        </p>
+      </div>
+      <Switch aria-label="Show special games to players" checked={enabled} onCheckedChange={toggle} disabled={saving} />
+    </div>
+  );
+};
+
 const AdminSpecialGames = () => {
-  const { isSystemUser } = usePermissions();
+  const { can } = usePermissions();
+  const allowed = can("special_games.manage");
   const queryClient = useQueryClient();
   const { data: games, isLoading, error } = useQuery({
     queryKey: KEY,
     queryFn: api.admin.specialGames.list,
-    enabled: isSystemUser,
+    enabled: allowed,
     refetchInterval: 60_000,
+  });
+  const { data: visibility } = useQuery({
+    queryKey: VISIBILITY_KEY,
+    queryFn: api.admin.specialGames.enabled,
+    enabled: allowed,
   });
 
   const onSaved: OnSaved = (next) => {
@@ -293,7 +332,7 @@ const AdminSpecialGames = () => {
   };
 
   return (
-    <AdminLayout systemOnly>
+    <AdminLayout permission="special_games.manage">
       <div className="mx-auto max-w-3xl space-y-5 px-4 pb-8 pt-6 sm:px-6">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold">
@@ -305,7 +344,20 @@ const AdminSpecialGames = () => {
           </p>
         </div>
 
-        <NewGame onSaved={onSaved} />
+        {visibility && (
+          <Visibility
+            enabled={visibility.enabled}
+            onChange={(enabled) => {
+              queryClient.setQueryData(VISIBILITY_KEY, { enabled });
+              queryClient.invalidateQueries({ queryKey: KEY });
+              queryClient.invalidateQueries({ queryKey: ["weeks"] });
+              queryClient.invalidateQueries({ queryKey: ["admin-wallet"] });
+              queryClient.invalidateQueries({ queryKey: ["wallet"] });
+            }}
+          />
+        )}
+
+        <NewGame taken={new Set(games?.map((g) => g.fixtureId))} onSaved={onSaved} />
 
         {isLoading ? (
           <div className="flex justify-center py-16">
