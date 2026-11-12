@@ -103,8 +103,9 @@ export function looksAsleep(res: Response, idempotent: boolean): boolean {
 
 /**
  * Render's edge (Cloudflare) is refusing requests instead of passing them on: a bot check
- * (`cf-mitigated: challenge`) or a rate limit. The backend never sees these, so retrying only adds
- * to the traffic that tripped the limit. The backend's own 429s are JSON and pass through as-is.
+ * (`cf-mitigated: challenge`) or a bare 429. It does this while a sleeping free service boots, so
+ * it's usually brief. The backend never sees these requests, so they're safe to retry. The
+ * backend's own 429s are JSON and pass through as-is.
  */
 export function blockedAtEdge(res: Response): boolean {
   if (res.headers.has("cf-mitigated")) return true;
@@ -122,7 +123,7 @@ export function edgeBlockedResponse(blocked: Response): Response {
   );
 }
 
-export const isIdempotent =(method: string) => ["GET", "HEAD", "OPTIONS", "PUT", "DELETE"].includes(method);
+export const isIdempotent = (method: string) => ["GET", "HEAD", "OPTIONS", "PUT", "DELETE"].includes(method);
 
 export interface RetryDeps {
   fetch: (request: Request) => Promise<Response>;
@@ -143,22 +144,28 @@ export async function fetchWithWakeRetry(
   retryCount: number,
   deps: RetryDeps = defaultDeps,
 ): Promise<Response> {
+  // The last edge refusal seen, so giving up can still say "busy" rather than "starting up".
+  let lastBlocked: Response | null = null;
   for (let attempt = 0; ; attempt++) {
     const request = makeRequest();
     const idempotent = isIdempotent(request.method);
     try {
       const res = await deps.fetch(request);
       if (blockedAtEdge(res)) {
-        console.warn(`wake-retry: ${new URL(request.url).pathname} blocked at Render's edge (${res.status}), not retrying`);
-        await res.body?.cancel();
-        return edgeBlockedResponse(res);
-      }
-      if (!looksAsleep(res, idempotent)) {
+        // While a sleeping free service boots, Render's edge answers with a challenge page or a
+        // bare 429 for ~30-60s. The backend never saw the request, so it's safe to send again
+        // (even a POST): retry like any other "not up yet" answer.
+        console.warn(`wake-retry: ${new URL(request.url).pathname} refused at Render's edge (${res.status}), attempt ${attempt + 1}`);
+        lastBlocked = res;
+      } else if (!looksAsleep(res, idempotent)) {
         if (attempt > 0) console.log(`wake-retry: ${new URL(request.url).pathname} answered after ${attempt} retries`);
         return res;
+      } else {
+        lastBlocked = null;
       }
       await res.body?.cancel();
     } catch (err) {
+      lastBlocked = null;
       // No connection at all: the request never reached the app, so it's safe to send again.
       console.log(`wake-retry: attempt ${attempt + 1} failed`, err);
     }
@@ -166,6 +173,7 @@ export async function fetchWithWakeRetry(
     await deps.sleep(RETRY_DELAY_MS);
   }
   console.error(`wake-retry: backend still not up after ${retryCount} retries`);
+  if (lastBlocked) return edgeBlockedResponse(lastBlocked);
   return Response.json(
     {
       message: "The server is starting up and didn't answer in time. Please try again in a minute.",

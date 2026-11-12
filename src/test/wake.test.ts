@@ -127,18 +127,26 @@ describe("fetchWithWakeRetry", () => {
     expect(d.fetch).toHaveBeenCalledTimes(3); // the first try plus 2 retries
   });
 
-  it("stops at once when Render's edge blocks the request, with a message the app can show", async () => {
-    const challenge = new Response("<html>Just a moment...</html>", {
+  const challenge = () =>
+    new Response("<html>Just a moment...</html>", {
       status: 429,
       headers: { "content-type": "text/html", "cf-mitigated": "challenge", "retry-after": "60" },
     });
-    const d = deps([challenge, json(200)]);
+
+  it("retries a POST through Render's edge refusals while the backend wakes (the login cold start)", async () => {
+    const d = deps([challenge(), challenge(), json(200, { token: "t" })]);
     const res = await fetchWithWakeRetry(post, 12, d);
+    expect(res.status).toBe(200);
+    expect(d.fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("says the server is busy if the edge still refuses after every retry", async () => {
+    const d = deps([challenge(), challenge(), challenge()]);
+    const res = await fetchWithWakeRetry(post, 2, d);
     expect(res.status).toBe(429);
     expect(res.headers.get("retry-after")).toBe("60");
     expect(await res.json()).toMatchObject({ code: "backend_busy" });
-    expect(d.fetch).toHaveBeenCalledTimes(1);
-    expect(d.sleep).not.toHaveBeenCalled();
+    expect(d.fetch).toHaveBeenCalledTimes(3);
   });
 
   it("doesn't retry a real error from the backend", async () => {
