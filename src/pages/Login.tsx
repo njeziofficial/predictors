@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { useApp } from "@/context/AppContext";
-import { api, type AuthResponse, type LoginMethod } from "@/lib/api";
+import { api, waitForServer, type AuthResponse, type LoginMethod } from "@/lib/api";
 import BiometricSignIn from "@/components/BiometricSignIn";
 import { offerBiometricsNextScreen } from "@/lib/passkeys";
 import { POINTS } from "@/lib/constants";
@@ -58,6 +58,8 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The server was asleep and sign-in is waiting for it to start.
+  const [waking, setWaking] = useState(false);
   const { currentUser, login } = useApp();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -99,6 +101,13 @@ const Login = () => {
     setLoading(true);
     setError(null);
     try {
+      // Wake a sleeping server first (up to a few minutes), rather than let the sign-in time out.
+      const awake = await waitForServer(() => setWaking(true));
+      setWaking(false);
+      if (!awake) {
+        setError("The server is taking longer than usual to start. Please try again in a few minutes.");
+        return;
+      }
       const res = await api.auth.login(method, value, password);
       try {
         localStorage.setItem(METHOD_KEY, method);
@@ -111,6 +120,7 @@ const Login = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed. Please try again.");
     } finally {
+      setWaking(false);
       setLoading(false);
     }
   };
@@ -305,7 +315,7 @@ const Login = () => {
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in…
+                    {waking ? "Waking the server…" : "Signing in…"}
                   </>
                 ) : (
                   <>
@@ -314,6 +324,11 @@ const Login = () => {
                   </>
                 )}
               </Button>
+              {waking && (
+                <p className="text-center text-xs text-muted-foreground" role="status">
+                  The server was asleep. Starting it can take up to 3 minutes; you'll be signed in as soon as it's ready.
+                </p>
+              )}
             </form>
 
             <BiometricSignIn onSignedIn={enter} onError={setError} />

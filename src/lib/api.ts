@@ -222,6 +222,8 @@ export interface WakeConfigDto {
   mode: WakeMode;
   retryCount: number;
   maxRetryCount: number;
+  // The Worker never retries fewer times than this while the server wakes, whatever is set.
+  minRetryCount?: number;
   retryDelaySeconds: number;
   // When the backend has matches to follow, as last fetched by the Worker (null until fetched).
   schedule: {
@@ -894,6 +896,48 @@ export interface ReadReceiptDto {
   conversationId: string;
   userId: string;
   readAt: string;
+}
+
+// ── Waking the server ─────────────────────────────────────────────────────────
+
+// Outside match times the backend sleeps (Render's free tier), and waking it took 1-3 minutes
+// when measured (12/11/2026): too long for one request to wait. So sign-in first checks the
+// server is up, with quick checks every WAKE_POLL_MS (each one also nudges Render to wake it).
+const WAKE_POLL_MS = 10_000;
+const WAKE_MAX_MS = 5 * 60_000;
+
+/**
+ * Resolves true once the server answers, false if it still hasn't after WAKE_MAX_MS. Calls
+ * onWaking once if the first check finds it asleep, so the page can say why it's waiting.
+ */
+export async function waitForServer(onWaking: () => void): Promise<boolean> {
+  const deadline = Date.now() + WAKE_MAX_MS;
+  let told = false;
+  for (;;) {
+    // AbortSignal.timeout is missing on older phones, so time the check out by hand.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20_000);
+    try {
+      const res = await fetch(`${BASE_URL}/api/auth/registration-status`, {
+        // The Worker answers this at once instead of retrying (worker/wake.ts, WAKE_PROBE_HEADER).
+        headers: { "X-Wake-Probe": "1" },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      noteLiveBundle(res.headers);
+      if (res.ok) return true;
+    } catch {
+      // Offline or timed out: same as asleep, check again shortly.
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!told) {
+      told = true;
+      onWaking();
+    }
+    if (Date.now() + WAKE_POLL_MS > deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, WAKE_POLL_MS));
+  }
 }
 
 // ── Core request helper ───────────────────────────────────────────────────────

@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import {
   blockedAtEdge,
   currentOrNextWindow,
+  effectiveRetryCount,
+  MIN_WAKE_RETRIES,
   fetchWithWakeRetry,
   looksAsleep,
   parseWakeConfig,
@@ -169,5 +171,13 @@ describe("parseWakeConfig", () => {
     expect(parseWakeConfig({ mode: "retry", retryCount: 31 })).toBeNull();
     expect(parseWakeConfig({ mode: "retry", retryCount: 2.5 })).toBeNull();
     expect(parseWakeConfig(null)).toBeNull();
+  });
+});
+
+describe("effectiveRetryCount", () => {
+  it("never waits less than a slow Render wake-up (~90s), but keeps a higher setting", () => {
+    expect(effectiveRetryCount(5)).toBe(MIN_WAKE_RETRIES);
+    expect(MIN_WAKE_RETRIES * 5).toBeGreaterThanOrEqual(110); // seconds, at the 5s retry delay
+    expect(effectiveRetryCount(30)).toBe(30);
   });
 });

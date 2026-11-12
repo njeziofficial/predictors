@@ -20,12 +20,22 @@ export interface WakeConfig {
 }
 
 export const WAKE_CONFIG_KEY = "backend-wake";
+// Sent by the app's quick "is the server up?" check: answer at once, without the retry loop.
+// Keep in step with waitForServer in src/lib/api.ts.
+export const WAKE_PROBE_HEADER = "X-Wake-Probe";
 // Today's behaviour until the system admin chooses otherwise.
 export const DEFAULT_WAKE_CONFIG: WakeConfig = { mode: "keepalive", retryCount: 12 };
 // Workers allow 50 outbound requests per incoming request on the free plan; stay well below it.
 export const MAX_RETRY_COUNT = 30;
 // Render takes about a minute to wake a service, so the default 12 retries waits ~60 seconds.
 export const RETRY_DELAY_MS = 5_000;
+// Measured wake-ups took 35-90s (12/11/2026), and Render's edge refuses requests for most of it.
+// Never wait less than this (~120s), whatever retry count is set, or the first sign-in after a
+// sleep fails. 25 attempts stay well inside the 50 subrequests a Worker request may make.
+export const MIN_WAKE_RETRIES = 24;
+
+/** The retries actually made: the configured count, but never fewer than a slow wake-up needs. */
+export const effectiveRetryCount = (configured: number) => Math.max(configured, MIN_WAKE_RETRIES);
 
 const MODES: readonly WakeMode[] = ["keepalive", "retry", "none", "matchwindows"];
 

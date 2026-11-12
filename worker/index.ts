@@ -1,14 +1,17 @@
 import {
   DEFAULT_WAKE_CONFIG,
   MAX_RETRY_COUNT,
+  MIN_WAKE_RETRIES,
   RETRY_DELAY_MS,
   SCHEDULE_REFRESH_MS,
   WAKE_CONFIG_KEY,
+  WAKE_PROBE_HEADER,
   WAKE_SCHEDULE_KEY,
   WAKE_WINDOWS_PATH,
   blockedAtEdge,
   currentOrNextWindow,
   edgeBlockedResponse,
+  effectiveRetryCount,
   fetchWithWakeRetry,
   inWindow,
   parseWakeConfig,
@@ -140,7 +143,10 @@ async function proxyToBackend(request: Request, env: Env, url: URL, ctx: Executi
   const config = await readWakeConfig(env);
   // WebSocket upgrades (the chat hub) can't be replayed; SignalR reconnects on its own anyway.
   const isUpgrade = request.headers.get("Upgrade")?.toLowerCase() === "websocket";
-  if (!retriesRequests(config.mode) || isUpgrade) {
+  // The app's "is the server up yet?" check (waitForServer in src/lib/api.ts) wants a quick yes or
+  // no, and does its own waiting between checks, so it never holds one request open for minutes.
+  const isWakeProbe = request.headers.has(WAKE_PROBE_HEADER);
+  if (!retriesRequests(config.mode) || isUpgrade || isWakeProbe) {
     const proxied = new Request(target, request);
     headers.forEach((value, key) => proxied.headers.set(key, value));
     const res = await fetch(proxied);
@@ -157,7 +163,7 @@ async function proxyToBackend(request: Request, env: Env, url: URL, ctx: Executi
   const body = hasBody ? await request.arrayBuffer() : undefined;
   const res = await fetchWithWakeRetry(
     () => new Request(target, { method: request.method, headers, body, redirect: request.redirect }),
-    config.retryCount,
+    effectiveRetryCount(config.retryCount),
   );
 
   // The backend is awake now anyway: a cheap moment to pick up fixtures added or moved.
@@ -183,7 +189,7 @@ async function checkSystemUser(request: Request, env: Env): Promise<Response | n
       new Request(new URL("/api/admin/permissions/me", env.BACKEND_URL), {
         headers: { Authorization: authorization, "ngrok-skip-browser-warning": "true" },
       }),
-    retriesRequests(config.mode) ? config.retryCount : 0,
+    retriesRequests(config.mode) ? effectiveRetryCount(config.retryCount) : 0,
   );
   // Pass a 401 through so the app refreshes an expired session and tries again.
   if (res.status === 401) return Response.json({ message: "Session expired." }, { status: 401 });
@@ -201,6 +207,7 @@ async function describe(config: WakeConfig, env: Env) {
   return {
     ...config,
     maxRetryCount: MAX_RETRY_COUNT,
+    minRetryCount: MIN_WAKE_RETRIES,
     retryDelaySeconds: RETRY_DELAY_MS / 1000,
     // What "match windows" mode is working from (kept up to date in every mode).
     schedule: schedule && {

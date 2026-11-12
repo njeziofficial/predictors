@@ -259,6 +259,9 @@ const AdminSettings = () => {
   const canSave = intervalValid && competitionValid && !isSaving;
 
   const retryDelay = wakeConfig?.retryDelaySeconds ?? 5;
+  // The Worker raises a low count to its minimum, so show the wait that really happens.
+  const minRetries = wakeConfig?.minRetryCount ?? 24;
+  const waitSeconds = Math.max(retryCount, minRetries) * retryDelay;
   const retryCountValid = Number.isInteger(retryCount) && retryCount >= 1 && retryCount <= (wakeConfig?.maxRetryCount ?? 30);
   const wakeConfigDirty = !!wakeConfig && (wakeMode !== wakeConfig.mode || retryCount !== wakeConfig.retryCount);
   // Modes that let the server sleep and retry requests while it wakes.
@@ -787,9 +790,9 @@ const AdminSettings = () => {
                   />
                   {retryCountValid ? (
                     <p className="text-xs text-muted-foreground">
-                      Tries again every {retryDelay}s, so a request waits up to about {retryCount * retryDelay}s for the
+                      Tries again every {retryDelay}s, so a request waits up to about {waitSeconds}s for the
                       server to wake before showing an error.
-                      {retryCount * retryDelay < 60 && " Render usually needs about 60s, so this may be too short."}
+                      {retryCount < minRetries && ` Counts below ${minRetries} are raised to ${minRetries}, since Render can take up to 90s to wake.`}
                     </p>
                   ) : (
                     <p className="text-xs text-destructive">Must be a whole number from 1 to {wakeConfig?.maxRetryCount ?? 30}.</p>
@@ -811,11 +814,11 @@ const AdminSettings = () => {
                       <AlertDialogTitle>Switch to "{WAKE_MODES.find((m) => m.value === wakeMode)?.label}"?</AlertDialogTitle>
                       <AlertDialogDescription>
                         {wakeMode === "matchwindows"
-                          ? `The server will be kept awake from 30 minutes before each kickoff until the match ends, and once a day briefly to find new fixtures. Otherwise it sleeps, and the first visitor waits up to about ${retryCount * retryDelay}s while it wakes.`
+                          ? `The server will be kept awake from 30 minutes before each kickoff until the match ends, and once a day briefly to find new fixtures. Otherwise it sleeps, and the first visitor waits up to about ${waitSeconds}s while it wakes.`
                           : wakeMode === "keepalive"
                           ? "The server will be pinged every 10 minutes and never sleep. This uses nearly all of Render's 750 free hours each month, so don't run another free service in the same Render workspace."
                           : wakeMode === "retry"
-                            ? `The server will sleep when nobody is using the app, and live scores won't update until someone opens it. The first visitor after a sleep waits up to about ${retryCount * retryDelay}s while it wakes.`
+                            ? `The server will sleep when nobody is using the app, and live scores won't update until someone opens it. The first visitor after a sleep waits up to about ${waitSeconds}s while it wakes.`
                             : "The server will sleep when nobody is using the app, and live scores won't update until someone opens it. The first requests after a sleep may fail with an error while it wakes."}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
