@@ -6,7 +6,9 @@ import {
   WAKE_CONFIG_KEY,
   WAKE_SCHEDULE_KEY,
   WAKE_WINDOWS_PATH,
+  blockedAtEdge,
   currentOrNextWindow,
+  edgeBlockedResponse,
   fetchWithWakeRetry,
   inWindow,
   parseWakeConfig,
@@ -141,7 +143,13 @@ async function proxyToBackend(request: Request, env: Env, url: URL, ctx: Executi
   if (!retriesRequests(config.mode) || isUpgrade) {
     const proxied = new Request(target, request);
     headers.forEach((value, key) => proxied.headers.set(key, value));
-    return fetch(proxied);
+    const res = await fetch(proxied);
+    if (!isUpgrade && blockedAtEdge(res)) {
+      console.warn(`proxy: ${url.pathname} blocked at Render's edge (${res.status})`);
+      await res.body?.cancel();
+      return edgeBlockedResponse(res);
+    }
+    return res;
   }
 
   // A body can only be sent once, so keep a copy for each attempt.

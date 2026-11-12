@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import {
+  blockedAtEdge,
   currentOrNextWindow,
   fetchWithWakeRetry,
   looksAsleep,
@@ -90,6 +91,17 @@ describe("looksAsleep", () => {
   });
 });
 
+describe("blockedAtEdge", () => {
+  it("spots Cloudflare challenges and bare rate limits, but not the backend's own JSON 429", () => {
+    const html429 = new Response("Too Many Requests", { status: 429, headers: { "content-type": "text/plain" } });
+    const challenge = new Response("<html></html>", { status: 403, headers: { "cf-mitigated": "challenge" } });
+    expect(blockedAtEdge(html429)).toBe(true);
+    expect(blockedAtEdge(challenge)).toBe(true);
+    expect(blockedAtEdge(json(429, { message: "Slow down" }))).toBe(false);
+    expect(blockedAtEdge(loadingPage())).toBe(false);
+  });
+});
+
 describe("fetchWithWakeRetry", () => {
   it("retries until the backend is up, then returns its answer", async () => {
     const d = deps([loadingPage(), new Error("connection refused"), gateway(502), json(200, { ok: true })]);
@@ -113,6 +125,20 @@ describe("fetchWithWakeRetry", () => {
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({ code: "backend_waking" });
     expect(d.fetch).toHaveBeenCalledTimes(3); // the first try plus 2 retries
+  });
+
+  it("stops at once when Render's edge blocks the request, with a message the app can show", async () => {
+    const challenge = new Response("<html>Just a moment...</html>", {
+      status: 429,
+      headers: { "content-type": "text/html", "cf-mitigated": "challenge", "retry-after": "60" },
+    });
+    const d = deps([challenge, json(200)]);
+    const res = await fetchWithWakeRetry(post, 12, d);
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("60");
+    expect(await res.json()).toMatchObject({ code: "backend_busy" });
+    expect(d.fetch).toHaveBeenCalledTimes(1);
+    expect(d.sleep).not.toHaveBeenCalled();
   });
 
   it("doesn't retry a real error from the backend", async () => {

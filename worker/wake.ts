@@ -101,7 +101,28 @@ export function looksAsleep(res: Response, idempotent: boolean): boolean {
   return res.status === 504 && idempotent;
 }
 
-export const isIdempotent = (method: string) => ["GET", "HEAD", "OPTIONS", "PUT", "DELETE"].includes(method);
+/**
+ * Render's edge (Cloudflare) is refusing requests instead of passing them on: a bot check
+ * (`cf-mitigated: challenge`) or a rate limit. The backend never sees these, so retrying only adds
+ * to the traffic that tripped the limit. The backend's own 429s are JSON and pass through as-is.
+ */
+export function blockedAtEdge(res: Response): boolean {
+  if (res.headers.has("cf-mitigated")) return true;
+  return res.status === 429 && !(res.headers.get("content-type") ?? "").includes("application/json");
+}
+
+/** What the app shows when the edge refuses a request: a message it can display, not a challenge page. */
+export function edgeBlockedResponse(blocked: Response): Response {
+  const headers: Record<string, string> = {};
+  const retryAfter = blocked.headers.get("retry-after");
+  if (retryAfter) headers["Retry-After"] = retryAfter;
+  return Response.json(
+    { message: "The server is busy right now. Please try again in a few minutes.", code: "backend_busy" },
+    { status: 429, headers },
+  );
+}
+
+export const isIdempotent =(method: string) => ["GET", "HEAD", "OPTIONS", "PUT", "DELETE"].includes(method);
 
 export interface RetryDeps {
   fetch: (request: Request) => Promise<Response>;
@@ -127,6 +148,11 @@ export async function fetchWithWakeRetry(
     const idempotent = isIdempotent(request.method);
     try {
       const res = await deps.fetch(request);
+      if (blockedAtEdge(res)) {
+        console.warn(`wake-retry: ${new URL(request.url).pathname} blocked at Render's edge (${res.status}), not retrying`);
+        await res.body?.cancel();
+        return edgeBlockedResponse(res);
+      }
       if (!looksAsleep(res, idempotent)) {
         if (attempt > 0) console.log(`wake-retry: ${new URL(request.url).pathname} answered after ${attempt} retries`);
         return res;
