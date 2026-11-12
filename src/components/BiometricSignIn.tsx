@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Fingerprint, Loader2, ScanFace } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useBiometricsAvailable } from "@/hooks/usePasskeys";
-import { api, type AuthResponse } from "@/lib/api";
+import { api, waitForServer, type AuthResponse } from "@/lib/api";
 import {
   PasskeyCancelled,
   askForPasskey,
@@ -26,6 +26,8 @@ const BiometricSignIn = ({
 }) => {
   const available = useBiometricsAvailable();
   const [busy, setBusy] = useState(false);
+  // The server was asleep: "waking" while it starts, then "ready" until the player taps again.
+  const [wake, setWake] = useState<"waking" | "ready" | null>(null);
   const { method } = biometricLabel();
 
   if (!available) return null;
@@ -35,6 +37,23 @@ const BiometricSignIn = ({
     onError(null);
     let credentialId: string | null = null;
     try {
+      // Wake a sleeping server first. The device's prompt must follow a tap closely (Safari
+      // refuses it otherwise), so after a wait the player taps once more instead of us prompting.
+      let waited = false;
+      const awake = await waitForServer(() => {
+        waited = true;
+        setWake("waking");
+      });
+      if (!awake) {
+        setWake(null);
+        onError("The server is taking longer than usual to start. Please try again in a few minutes.");
+        return;
+      }
+      if (waited) {
+        setWake("ready");
+        return;
+      }
+      setWake(null);
       const { flowId, options } = await api.auth.passkeyOptions();
       const response = await askForPasskey(options);
       credentialId = response.rawId;
@@ -69,8 +88,15 @@ const BiometricSignIn = ({
         disabled={busy}
       >
         {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icon className="mr-2 h-4 w-4" />}
-        Sign in with {method}
+        {wake === "waking" ? "Waking the server…" : `Sign in with ${method}`}
       </Button>
+      {wake && (
+        <p className="text-center text-xs text-muted-foreground" role="status">
+          {wake === "waking"
+            ? "The server was asleep. Starting it can take up to 3 minutes."
+            : `The server is ready. Tap "Sign in with ${method}" again to finish.`}
+        </p>
+      )}
     </div>
   );
 };

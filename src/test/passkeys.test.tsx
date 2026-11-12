@@ -21,7 +21,10 @@ const listPasskeys = vi.fn();
 const removePasskey = vi.fn(async (_id: string) => {});
 const getPasskeySettings = vi.fn();
 const setPasskeySettings = vi.fn();
+// Resolves whether the server is up; a test calls onWaking first to act out a sleeping server.
+const waitForServer = vi.fn(async (_onWaking: () => void) => true);
 vi.mock("@/lib/api", () => ({
+  waitForServer: (onWaking: () => void) => waitForServer(onWaking),
   api: {
     auth: { passkeyOptions: () => passkeyOptions(), passkeyLogin: (...a: unknown[]) => passkeyLogin(...a) },
     passkeys: { list: () => listPasskeys(), registrationOptions: vi.fn(), register: vi.fn(), remove: (id: string) => removePasskey(id) },
@@ -108,6 +111,8 @@ describe("signing in with fingerprint or face", () => {
   beforeEach(() => {
     localStorage.clear();
     passkeyOptions.mockResolvedValue({ flowId: "f1", options: { challenge: toB64url(bytes(1)) } });
+    passkeyOptions.mockClear();
+    waitForServer.mockImplementation(async () => true);
     setAgent("Mozilla/5.0 (Linux; Android 14; Pixel 8)");
   });
   afterEach(() => {
@@ -147,6 +152,46 @@ describe("signing in with fingerprint or face", () => {
     expect(flowId).toBe("f1");
     expect(sent).toMatchObject({ rawId: toB64url(bytes(1, 2)), response: { signature: toB64url(bytes(4)), userHandle: toB64url(bytes(6)) } });
     expect(passkeyIdHere()).toBe(toB64url(bytes(1, 2)));
+  });
+
+  it("wakes a sleeping server first, then asks for one more tap rather than prompting late", async () => {
+    fakeDevice(async () => deviceAnswer);
+    passkeyLogin.mockResolvedValue({ token: "t", userId: "u1", name: "Pat" });
+    waitForServer.mockImplementationOnce(async (onWaking) => {
+      onWaking();
+      return true;
+    });
+    const { onSignedIn } = await renderButton();
+
+    const button = await screen.findByText("Sign in with fingerprint or face unlock");
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    expect(await screen.findByText(/The server is ready/)).toBeInTheDocument();
+    expect(passkeyOptions).not.toHaveBeenCalled();
+    expect(navigator.credentials.get).not.toHaveBeenCalled();
+
+    // The second tap finds the server up and goes straight to the device's prompt.
+    await act(async () => {
+      fireEvent.click(screen.getByText("Sign in with fingerprint or face unlock"));
+    });
+    await waitFor(() => expect(onSignedIn).toHaveBeenCalledWith(expect.objectContaining({ userId: "u1" })));
+    expect(screen.queryByText(/The server is ready/)).not.toBeInTheDocument();
+  });
+
+  it("says so when the server doesn't wake in time, without prompting", async () => {
+    fakeDevice(async () => deviceAnswer);
+    waitForServer.mockImplementationOnce(async (onWaking) => {
+      onWaking();
+      return false;
+    });
+    const { onError } = await renderButton();
+    const button = await screen.findByText("Sign in with fingerprint or face unlock");
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringMatching(/taking longer than usual/)));
+    expect(navigator.credentials.get).not.toHaveBeenCalled();
   });
 
   it("says nothing when the player closes the prompt", async () => {
