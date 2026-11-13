@@ -5,6 +5,8 @@ import {
   effectiveRetryCount,
   MIN_WAKE_RETRIES,
   fetchWithWakeRetry,
+  EDGE_BACKOFF_MS,
+  inEdgeBackoff,
   looksAsleep,
   parseWakeConfig,
   parseWakeWindows,
@@ -13,6 +15,21 @@ import {
   shouldWakeForSchedule,
   type WakeSchedule,
 } from "../../worker/wake";
+
+describe("edge back-off", () => {
+  const now = Date.parse("2026-11-13T12:00:00Z");
+
+  it("holds off the cron's pings until the stored time passes", () => {
+    expect(inEdgeBackoff(String(now + EDGE_BACKOFF_MS), now)).toBe(true);
+    expect(inEdgeBackoff(String(now + EDGE_BACKOFF_MS), now + EDGE_BACKOFF_MS)).toBe(false);
+  });
+
+  it("pings as usual with nothing stored or something unreadable", () => {
+    expect(inEdgeBackoff(null, now)).toBe(false);
+    expect(inEdgeBackoff("", now)).toBe(false);
+    expect(inEdgeBackoff("soon", now)).toBe(false);
+  });
+});
 
 describe("match windows", () => {
   const at = (iso: string) => Date.parse(iso);
@@ -135,20 +152,22 @@ describe("fetchWithWakeRetry", () => {
       headers: { "content-type": "text/html", "cf-mitigated": "challenge", "retry-after": "60" },
     });
 
-  it("retries a POST through Render's edge refusals while the backend wakes (the login cold start)", async () => {
-    const d = deps([challenge(), challenge(), json(200, { token: "t" })]);
-    const res = await fetchWithWakeRetry(post, 12, d);
-    expect(res.status).toBe(200);
-    expect(d.fetch).toHaveBeenCalledTimes(3);
-  });
-
-  it("says the server is busy if the edge still refuses after every retry", async () => {
-    const d = deps([challenge(), challenge(), challenge()]);
-    const res = await fetchWithWakeRetry(post, 2, d);
+  it("stops at once when Render's edge refuses, saying the server is busy (13/11/2026)", async () => {
+    const d = deps([challenge(), json(200, { token: "t" })]);
+    const res = await fetchWithWakeRetry(post, 24, d);
     expect(res.status).toBe(429);
     expect(res.headers.get("retry-after")).toBe("60");
     expect(await res.json()).toMatchObject({ code: "backend_busy" });
-    expect(d.fetch).toHaveBeenCalledTimes(3);
+    expect(d.fetch).toHaveBeenCalledTimes(1);
+    expect(d.sleep).not.toHaveBeenCalled();
+  });
+
+  it("stops at the edge refusal even after waiting out a sleeping backend", async () => {
+    const asleep = new Response("<html>waking</html>", { status: 503, headers: { "content-type": "text/html" } });
+    const d = deps([asleep, challenge(), json(200)]);
+    const res = await fetchWithWakeRetry(post, 24, d);
+    expect(res.status).toBe(429);
+    expect(d.fetch).toHaveBeenCalledTimes(2);
   });
 
   it("doesn't retry a real error from the backend", async () => {

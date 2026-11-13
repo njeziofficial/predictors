@@ -1,5 +1,7 @@
 import {
   DEFAULT_WAKE_CONFIG,
+  EDGE_BACKOFF_MS,
+  EDGE_BLOCK_KEY,
   MAX_RETRY_COUNT,
   MIN_WAKE_RETRIES,
   RETRY_DELAY_MS,
@@ -13,6 +15,7 @@ import {
   edgeBlockedResponse,
   effectiveRetryCount,
   fetchWithWakeRetry,
+  inEdgeBackoff,
   inWindow,
   parseWakeConfig,
   parseWakeWindows,
@@ -75,6 +78,20 @@ async function readSchedule(env: Env): Promise<WakeSchedule | null> {
   return value;
 }
 
+// Render's edge refused a cron request: hold off the cron's pings for a while (see inEdgeBackoff).
+// Returns true if it did.
+async function noteEdgeBlock(env: Env, res: Response, what: string): Promise<boolean> {
+  if (!blockedAtEdge(res)) return false;
+  await res.body?.cancel();
+  console.warn(`${what}: refused at Render's edge (${res.status}), pausing pings for ${EDGE_BACKOFF_MS / 60_000} minutes`);
+  try {
+    await env.EDGE_CONFIG?.put(EDGE_BLOCK_KEY, String(Date.now() + EDGE_BACKOFF_MS));
+  } catch (err) {
+    console.error("edge-backoff: write failed", err);
+  }
+  return true;
+}
+
 // Asks the backend when it next needs to be awake. Waking it is the point when the cron calls
 // this, so it waits out a cold start.
 async function refreshSchedule(env: Env): Promise<void> {
@@ -83,6 +100,7 @@ async function refreshSchedule(env: Env): Promise<void> {
       headers: { "ngrok-skip-browser-warning": "true" },
       signal: AbortSignal.timeout(90_000), // a cold start can take up to a minute
     });
+    if (await noteEdgeBlock(env, res, "wake-schedule")) return;
     const windows = res.ok ? parseWakeWindows(await res.json().catch(() => null)) : null;
     if (!windows) {
       console.error(`wake-schedule: backend answered ${res.status} without windows`);
@@ -103,6 +121,19 @@ async function onCron(env: Env): Promise<void> {
   if (!env.BACKEND_URL) return;
   const config = await readWakeConfig(env);
 
+  if (config.mode === "matchwindows" || config.mode === "keepalive") {
+    let blockedUntil: string | null = null;
+    try {
+      blockedUntil = (await env.EDGE_CONFIG?.get(EDGE_BLOCK_KEY)) ?? null;
+    } catch (err) {
+      console.error("edge-backoff: read failed", err);
+    }
+    if (inEdgeBackoff(blockedUntil, Date.now())) {
+      console.log(`keep-alive: Render's edge refused recently, not pinging until ${new Date(Number(blockedUntil)).toISOString()}`);
+      return;
+    }
+  }
+
   if (config.mode === "matchwindows") {
     // The refresh is the ping: it wakes the backend, or keeps it awake.
     if (shouldWakeForSchedule(await readSchedule(env), Date.now())) await refreshSchedule(env);
@@ -120,6 +151,7 @@ async function onCron(env: Env): Promise<void> {
       redirect: "manual",
       signal: AbortSignal.timeout(90_000), // a cold start can take up to a minute
     });
+    if (await noteEdgeBlock(env, res, "keep-alive")) return;
     console.log(`keep-alive: backend answered ${res.status}`);
   } catch (err) {
     console.error("keep-alive: backend ping failed", err);
