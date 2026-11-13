@@ -152,14 +152,22 @@ describe("fetchWithWakeRetry", () => {
       headers: { "content-type": "text/html", "cf-mitigated": "challenge", "retry-after": "60" },
     });
 
-  it("stops at once when Render's edge refuses, saying the server is busy (13/11/2026)", async () => {
+  it("stops at once at Render's bot check, handing the app the address a person can tick it at (13/11/2026)", async () => {
     const d = deps([challenge(), json(200, { token: "t" })]);
     const res = await fetchWithWakeRetry(post, 24, d);
     expect(res.status).toBe(429);
     expect(res.headers.get("retry-after")).toBe("60");
-    expect(await res.json()).toMatchObject({ code: "backend_busy" });
+    expect(await res.json()).toMatchObject({ code: "human_check", wakeUrl: "https://backend.test/" });
     expect(d.fetch).toHaveBeenCalledTimes(1);
     expect(d.sleep).not.toHaveBeenCalled();
+  });
+
+  it("calls a bare rate limit busy: no checkbox clears that", async () => {
+    const limited = new Response("Too Many Requests", { status: 429, headers: { "content-type": "text/plain" } });
+    const res = await fetchWithWakeRetry(post, 24, deps([limited]));
+    const body = await res.json();
+    expect(body).toMatchObject({ code: "backend_busy" });
+    expect(body.wakeUrl).toBeUndefined();
   });
 
   it("stops at the edge refusal even after waiting out a sleeping backend", async () => {

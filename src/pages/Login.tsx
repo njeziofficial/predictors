@@ -8,6 +8,8 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { useApp } from "@/context/AppContext";
 import { api, waitForServer, type AuthResponse, type LoginMethod } from "@/lib/api";
 import BiometricSignIn from "@/components/BiometricSignIn";
+import WakeServerPrompt from "@/components/WakeServerPrompt";
+import { useWakeServer } from "@/hooks/useWakeServer";
 import { offerBiometricsNextScreen } from "@/lib/passkeys";
 import { POINTS } from "@/lib/constants";
 import { toast } from "sonner";
@@ -60,6 +62,9 @@ const Login = () => {
   const [error, setError] = useState<string | null>(null);
   // The server was asleep and sign-in is waiting for it to start.
   const [waking, setWaking] = useState(false);
+  // Render's edge wants a person to tick "I'm human" before it wakes the server (WakeServerPrompt).
+  // Shared with BiometricSignIn so there's only ever one prompt.
+  const wake = useWakeServer();
   const { currentUser, login } = useApp();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -102,9 +107,17 @@ const Login = () => {
     setError(null);
     try {
       // Wake a sleeping server first (up to a few minutes), rather than let the sign-in time out.
-      const awake = await waitForServer(() => setWaking(true));
+      const outcome = await waitForServer(() => setWaking(true));
       setWaking(false);
-      if (!awake) {
+      if (outcome.status === "human_check") {
+        // One tap and a tick from the player, then sign-in carries on with what they typed.
+        const result = await wake.ask(outcome.wakeUrl);
+        if (result === "cancelled") return;
+        if (result === "timeout") {
+          setError("The server still hasn't started. Please try again in a few minutes.");
+          return;
+        }
+      } else if (outcome.status === "timeout") {
         setError("The server is taking longer than usual to start. Please try again in a few minutes.");
         return;
       }
@@ -315,7 +328,7 @@ const Login = () => {
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {waking ? "Waking the server…" : "Signing in…"}
+                    {waking || wake.phase !== "idle" ? "Waking the server…" : "Signing in…"}
                   </>
                 ) : (
                   <>
@@ -331,7 +344,9 @@ const Login = () => {
               )}
             </form>
 
-            <BiometricSignIn onSignedIn={enter} onError={setError} />
+            <WakeServerPrompt wake={wake} className="mt-4" />
+
+            <BiometricSignIn onSignedIn={enter} onError={setError} serverCheck={wake} />
 
             {registration?.open !== false && (
               <p className="mt-6 text-center text-xs text-muted-foreground">

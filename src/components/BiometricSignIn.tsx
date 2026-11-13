@@ -3,6 +3,7 @@ import { Fingerprint, Loader2, ScanFace } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useBiometricsAvailable } from "@/hooks/usePasskeys";
 import { api, waitForServer, type AuthResponse } from "@/lib/api";
+import type { WakeServer } from "@/hooks/useWakeServer";
 import {
   PasskeyCancelled,
   askForPasskey,
@@ -20,9 +21,12 @@ import {
 const BiometricSignIn = ({
   onSignedIn,
   onError,
+  serverCheck,
 }: {
   onSignedIn: (res: AuthResponse) => void;
   onError: (message: string | null) => void;
+  // The sign-in page's "I'm human" prompt (WakeServerPrompt), shared with the password form.
+  serverCheck: WakeServer;
 }) => {
   const available = useBiometricsAvailable();
   const [busy, setBusy] = useState(false);
@@ -40,11 +44,20 @@ const BiometricSignIn = ({
       // Wake a sleeping server first. The device's prompt must follow a tap closely (Safari
       // refuses it otherwise), so after a wait the player taps once more instead of us prompting.
       let waited = false;
-      const awake = await waitForServer(() => {
+      const outcome = await waitForServer(() => {
         waited = true;
         setWake("waking");
       });
-      if (!awake) {
+      if (outcome.status === "human_check") {
+        waited = true;
+        setWake("waking");
+        const result = await serverCheck.ask(outcome.wakeUrl);
+        if (result !== "awake") {
+          setWake(null);
+          if (result === "timeout") onError("The server still hasn't started. Please try again in a few minutes.");
+          return;
+        }
+      } else if (outcome.status === "timeout") {
         setWake(null);
         onError("The server is taking longer than usual to start. Please try again in a few minutes.");
         return;

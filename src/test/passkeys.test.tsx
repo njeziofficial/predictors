@@ -22,7 +22,9 @@ const removePasskey = vi.fn(async (_id: string) => {});
 const getPasskeySettings = vi.fn();
 const setPasskeySettings = vi.fn();
 // Resolves whether the server is up; a test calls onWaking first to act out a sleeping server.
-const waitForServer = vi.fn(async (_onWaking: () => void) => true);
+type WaitOutcome = { status: "awake" } | { status: "timeout" } | { status: "human_check"; wakeUrl: string };
+const awake: WaitOutcome = { status: "awake" };
+const waitForServer = vi.fn(async (_onWaking: () => void): Promise<WaitOutcome> => awake);
 vi.mock("@/lib/api", () => ({
   waitForServer: (onWaking: () => void) => waitForServer(onWaking),
   api: {
@@ -112,7 +114,7 @@ describe("signing in with fingerprint or face", () => {
     localStorage.clear();
     passkeyOptions.mockResolvedValue({ flowId: "f1", options: { challenge: toB64url(bytes(1)) } });
     passkeyOptions.mockClear();
-    waitForServer.mockImplementation(async () => true);
+    waitForServer.mockImplementation(async () => awake);
     setAgent("Mozilla/5.0 (Linux; Android 14; Pixel 8)");
   });
   afterEach(() => {
@@ -120,14 +122,24 @@ describe("signing in with fingerprint or face", () => {
     vi.unstubAllGlobals();
   });
 
-  const renderButton = async (onSignedIn = vi.fn(), onError = vi.fn()) => {
+  // The sign-in page's "I'm human" prompt; ask() settles as each test says.
+  const fakeWake = (result: "awake" | "timeout" | "cancelled" = "awake") => ({
+    phase: "idle" as const,
+    wakeUrl: null,
+    ask: vi.fn(async () => result),
+    openCheck: vi.fn(),
+    openedAsLink: vi.fn(),
+    cancel: vi.fn(),
+  });
+
+  const renderButton = async (onSignedIn = vi.fn(), onError = vi.fn(), wake = fakeWake()) => {
     const { default: BiometricSignIn } = await import("@/components/BiometricSignIn");
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <BiometricSignIn onSignedIn={onSignedIn} onError={onError} />
+        <BiometricSignIn onSignedIn={onSignedIn} onError={onError} serverCheck={wake} />
       </QueryClientProvider>,
     );
-    return { onSignedIn, onError };
+    return { onSignedIn, onError, wake };
   };
 
   const deviceAnswer = {
@@ -159,7 +171,7 @@ describe("signing in with fingerprint or face", () => {
     passkeyLogin.mockResolvedValue({ token: "t", userId: "u1", name: "Pat" });
     waitForServer.mockImplementationOnce(async (onWaking) => {
       onWaking();
-      return true;
+      return awake;
     });
     const { onSignedIn } = await renderButton();
 
@@ -183,7 +195,7 @@ describe("signing in with fingerprint or face", () => {
     fakeDevice(async () => deviceAnswer);
     waitForServer.mockImplementationOnce(async (onWaking) => {
       onWaking();
-      return false;
+      return { status: "timeout" };
     });
     const { onError } = await renderButton();
     const button = await screen.findByText("Sign in with fingerprint or face unlock");
@@ -191,6 +203,33 @@ describe("signing in with fingerprint or face", () => {
       fireEvent.click(button);
     });
     await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringMatching(/taking longer than usual/)));
+    expect(navigator.credentials.get).not.toHaveBeenCalled();
+  });
+
+  it("asks for the human check when Render wants one, then waits for one more tap", async () => {
+    fakeDevice(async () => deviceAnswer);
+    waitForServer.mockImplementationOnce(async () => ({ status: "human_check", wakeUrl: "https://backend.test/" }));
+    const { wake, onError } = await renderButton();
+    const button = await screen.findByText("Sign in with fingerprint or face unlock");
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    expect(wake.ask).toHaveBeenCalledWith("https://backend.test/");
+    expect(await screen.findByText(/The server is ready/)).toBeInTheDocument();
+    expect(navigator.credentials.get).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalledWith(expect.any(String));
+  });
+
+  it("says nothing when the player cancels the human check", async () => {
+    fakeDevice(async () => deviceAnswer);
+    waitForServer.mockImplementationOnce(async () => ({ status: "human_check", wakeUrl: "https://backend.test/" }));
+    const { onError } = await renderButton(vi.fn(), vi.fn(), fakeWake("cancelled"));
+    const button = await screen.findByText("Sign in with fingerprint or face unlock");
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    expect(onError).not.toHaveBeenCalledWith(expect.any(String));
+    expect(screen.queryByText(/The server is ready/)).not.toBeInTheDocument();
     expect(navigator.credentials.get).not.toHaveBeenCalled();
   });
 

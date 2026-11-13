@@ -185,7 +185,7 @@ async function proxyToBackend(request: Request, env: Env, url: URL, ctx: Executi
     if (!isUpgrade && blockedAtEdge(res)) {
       console.warn(`proxy: ${url.pathname} blocked at Render's edge (${res.status})`);
       await res.body?.cancel();
-      return edgeBlockedResponse(res);
+      return edgeBlockedResponse(res, env.BACKEND_URL);
     }
     return res;
   }
@@ -225,8 +225,8 @@ async function checkSystemUser(request: Request, env: Env): Promise<Response | n
   );
   // Pass a 401 through so the app refreshes an expired session and tries again.
   if (res.status === 401) return Response.json({ message: "Session expired." }, { status: 401 });
-  // Backend asleep or failing: say so, rather than claim the user isn't allowed.
-  if (res.status >= 500) return res;
+  // Backend asleep, failing or refused at Render's edge: say so, rather than claim the user isn't allowed.
+  if (res.status >= 500 || res.status === 429) return res;
   const me = res.ok ? ((await res.json().catch(() => null)) as { isSystemUser?: boolean } | null) : null;
   if (me?.isSystemUser !== true)
     return Response.json({ code: "permission_denied", message: "Only the system admin can do this." }, { status: 403 });

@@ -133,11 +133,29 @@ export function blockedAtEdge(res: Response): boolean {
   return res.status === 429 && !(res.headers.get("content-type") ?? "").includes("application/json");
 }
 
-/** What the app shows when the edge refuses a request: a message it can display, not a challenge page. */
-export function edgeBlockedResponse(blocked: Response): Response {
+/**
+ * What the app shows when the edge refuses a request: a message it can display, not a challenge page.
+ *
+ * A bot check (`cf-mitigated: challenge`) is answered with `human_check` and the backend's address:
+ * a person who opens that address in their own browser and ticks "I'm human" gets a request
+ * through, which wakes the backend, after which the Worker's requests pass again (seen 13/11/2026).
+ * The app offers that as one tap (src/hooks/useWakeServer.ts). A bare 429 is a rate limit, which
+ * no checkbox clears, so it stays `backend_busy`.
+ */
+export function edgeBlockedResponse(blocked: Response, backendUrl: string): Response {
   const headers: Record<string, string> = {};
   const retryAfter = blocked.headers.get("retry-after");
   if (retryAfter) headers["Retry-After"] = retryAfter;
+  if (blocked.headers.get("cf-mitigated") === "challenge") {
+    return Response.json(
+      {
+        message: "The server is asleep and its host wants a quick check that you're human before starting it.",
+        code: "human_check",
+        wakeUrl: new URL("/", backendUrl).toString(),
+      },
+      { status: 429, headers },
+    );
+  }
   return Response.json(
     { message: "The server is busy right now. Please try again in a few minutes.", code: "backend_busy" },
     { status: 429, headers },
@@ -175,7 +193,7 @@ export async function fetchWithWakeRetry(
         // say so; the app checks again on its own, gently (waitForServer in src/lib/api.ts).
         console.warn(`wake-retry: ${new URL(request.url).pathname} refused at Render's edge (${res.status}), not retrying`);
         await res.body?.cancel();
-        return edgeBlockedResponse(res);
+        return edgeBlockedResponse(res, request.url);
       }
       if (!looksAsleep(res, idempotent)) {
         if (attempt > 0) console.log(`wake-retry: ${new URL(request.url).pathname} answered after ${attempt} retries`);

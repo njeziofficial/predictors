@@ -907,35 +907,74 @@ const WAKE_POLL_MS = 10_000;
 const WAKE_MAX_MS = 5 * 60_000;
 
 /**
- * Resolves true once the server answers, false if it still hasn't after WAKE_MAX_MS. Calls
- * onWaking once if the first check finds it asleep, so the page can say why it's waiting.
+ * One quick look at whether the server is up. "human_check": Render's edge wants a person to tick
+ * "I'm human" at wakeUrl before it lets anything through (worker/wake.ts, edgeBlockedResponse);
+ * useWakeServer offers that to the player.
  */
-export async function waitForServer(onWaking: () => void): Promise<boolean> {
+export type ServerCheck = { state: "up" } | { state: "down" } | { state: "human_check"; wakeUrl: string };
+
+export async function checkServer(): Promise<ServerCheck> {
+  // AbortSignal.timeout is missing on older phones, so time the check out by hand.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const res = await fetch(`${BASE_URL}/api/auth/registration-status`, {
+      // The Worker answers this at once instead of retrying (worker/wake.ts, WAKE_PROBE_HEADER).
+      headers: { "X-Wake-Probe": "1" },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    noteLiveBundle(res.headers);
+    if (res.ok) return { state: "up" };
+    if (res.status === 429) {
+      const wakeUrl = humanCheckUrl(await res.json().catch(() => null));
+      if (wakeUrl) return { state: "human_check", wakeUrl };
+    }
+    return { state: "down" };
+  } catch {
+    // Offline or timed out: same as asleep.
+    return { state: "down" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** The address to tick "I'm human" at, from a `human_check` answer; null for anything else. */
+function humanCheckUrl(body: unknown): string | null {
+  const { code, wakeUrl } = (body ?? {}) as { code?: unknown; wakeUrl?: unknown };
+  if (code !== "human_check" || typeof wakeUrl !== "string") return null;
+  // It's opened in a new window, so only ever a web address.
+  try {
+    const url = new URL(wakeUrl);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+// Sent on window when a request mid-session meets the bot check (ServerCheckBanner offers it).
+export const HUMAN_CHECK_EVENT = "op:human-check";
+
+export type WaitOutcome = { status: "awake" } | { status: "timeout" } | { status: "human_check"; wakeUrl: string };
+
+/**
+ * Resolves "awake" once the server answers, "timeout" if it still hasn't after WAKE_MAX_MS, and
+ * "human_check" at once if Render's edge wants a person to tick its checkbox, since waiting alone
+ * won't get past that. Calls onWaking once if the first check finds it asleep, so the page can say
+ * why it's waiting.
+ */
+export async function waitForServer(onWaking: () => void): Promise<WaitOutcome> {
   const deadline = Date.now() + WAKE_MAX_MS;
   let told = false;
   for (;;) {
-    // AbortSignal.timeout is missing on older phones, so time the check out by hand.
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 20_000);
-    try {
-      const res = await fetch(`${BASE_URL}/api/auth/registration-status`, {
-        // The Worker answers this at once instead of retrying (worker/wake.ts, WAKE_PROBE_HEADER).
-        headers: { "X-Wake-Probe": "1" },
-        cache: "no-store",
-        signal: controller.signal,
-      });
-      noteLiveBundle(res.headers);
-      if (res.ok) return true;
-    } catch {
-      // Offline or timed out: same as asleep, check again shortly.
-    } finally {
-      clearTimeout(timer);
-    }
+    const check = await checkServer();
+    if (check.state === "up") return { status: "awake" };
+    if (check.state === "human_check") return { status: "human_check", wakeUrl: check.wakeUrl };
     if (!told) {
       told = true;
       onWaking();
     }
-    if (Date.now() + WAKE_POLL_MS > deadline) return false;
+    if (Date.now() + WAKE_POLL_MS > deadline) return { status: "timeout" };
     await new Promise((resolve) => setTimeout(resolve, WAKE_POLL_MS));
   }
 }
@@ -962,7 +1001,11 @@ export function refreshSession(): Promise<RefreshOutcome> {
       // Only the server saying so ends the session. A 502/503/504 is the backend waking up
       // (Render's free tier sleeps), which used to sign players out whenever they reopened the app.
       if (res.status === 401) return "expired";
-      if (!res.ok) return "unavailable";
+      if (!res.ok) {
+        const wakeUrl = res.status === 429 ? humanCheckUrl(await res.json().catch(() => null)) : null;
+        if (wakeUrl) window.dispatchEvent(new CustomEvent(HUMAN_CHECK_EVENT, { detail: { wakeUrl } }));
+        return "unavailable";
+      }
       const auth = (await res.json()) as AuthResponse;
       // The refresh response carries the user's current role/flags, so a change an admin made
       // (e.g. a promotion) shows up here without a fresh login.
@@ -1053,6 +1096,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const { message, code } = body as { message?: string; code?: string };
+
+    const wakeUrl = humanCheckUrl(body);
+    if (wakeUrl) window.dispatchEvent(new CustomEvent(HUMAN_CHECK_EVENT, { detail: { wakeUrl } }));
 
     if (code === "account_disabled") {
       // Only force a redirect when this was an authenticated request that got cut off
