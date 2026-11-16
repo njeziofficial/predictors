@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import WakeServerPrompt from "@/components/WakeServerPrompt";
 import { useApp } from "@/context/AppContext";
 import { useWakeServer } from "@/hooks/useWakeServer";
@@ -27,8 +26,8 @@ const ServerCheckBanner = () => {
       const wakeUrl = (e as CustomEvent<{ wakeUrl?: string }>).detail?.wakeUrl;
       if (!wakeUrl) return;
       void ask(wakeUrl).then((result) => {
+        // useWakeServer shows the "awake" toast.
         if (result !== "awake") return;
-        toast.success("The server is awake.");
         void queryClient.invalidateQueries();
       });
     };

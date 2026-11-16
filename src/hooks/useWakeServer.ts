@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { checkServer } from "@/lib/api";
 
 // When Render's edge (Cloudflare) refuses the Worker with a bot check, waiting never gets past it,
@@ -37,6 +38,9 @@ interface Run {
   popup: Window | null;
 }
 
+// Shared with public/server-awake.html.
+export const AWAKE_CHANNEL = "op-server-check";
+
 const POPUP_W = 440;
 const POPUP_H = 640;
 
@@ -66,6 +70,7 @@ export function useWakeServer() {
       }
       window.focus();
     }
+    if (result === "awake") toast.success("The server is awake.");
     setPhase("idle");
     setWakeUrl(null);
     r.resolve(result);
@@ -157,6 +162,15 @@ export function useWakeServer() {
       window.removeEventListener("focus", now);
       document.removeEventListener("visibilitychange", now);
     };
+  }, [phase, check]);
+
+  // The check's window lands on public/server-awake.html once the server is up (via the backend's
+  // /wake), which says so on this channel: check at once, so the app moves on as the window closes.
+  useEffect(() => {
+    if (phase === "idle" || typeof BroadcastChannel === "undefined") return;
+    const channel = new BroadcastChannel(AWAKE_CHANNEL);
+    channel.onmessage = () => void check();
+    return () => channel.close();
   }, [phase, check]);
 
   // Leaving the page mid-check: stop checking, and let whoever was waiting go on.

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Server awake · Octopus Prediction</title>
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px;
+        background: #0b0d12; color: #e8e9ec;
+        font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      main { max-width: 340px; text-align: center; }
+      .tick {
+        width: 48px; height: 48px; margin: 0 auto 16px; border-radius: 50%;
+        display: grid; place-items: center; background: rgba(234, 88, 12, 0.15); color: #f97316;
+      }
+      h1 { font-size: 20px; margin: 0 0 8px; }
+      p { margin: 0 0 20px; color: #9ca3af; }
+      a {
+        display: inline-block; padding: 10px 18px; border-radius: 8px;
+        background: #ea580c; color: #fff; text-decoration: none; font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="tick" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+      </div>
+      <h1>The server is awake</h1>
+      <p>You can close this window and go back to Octopus Prediction.</p>
+      <a href="/">Back to Octopus Prediction</a>
+    </main>
+    <script>
+      // The backend's /wake sends the "I'm human" window here once the server is up. Tell the app
+      // (src/hooks/useWakeServer.ts listens on this channel), then close: the window was opened by
+      // the app, so browsers usually allow it. Phones open a tab instead and keep the page above.
+      try {
+        const channel = new BroadcastChannel("op-server-check");
+        channel.postMessage("awake");
+        channel.close();
+      } catch {
+        // Older browsers: the app notices on its next check anyway.
+      }
+      setTimeout(() => window.close(), 400);
+    </script>
+  </body>
+</html>

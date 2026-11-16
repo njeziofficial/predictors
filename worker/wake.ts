@@ -151,7 +151,8 @@ export function edgeBlockedResponse(blocked: Response, backendUrl: string): Resp
       {
         message: "The server is asleep and its host wants a quick check that you're human before starting it.",
         code: "human_check",
-        wakeUrl: new URL("/", backendUrl).toString(),
+        // Redirects back to the app's public/server-awake.html once the backend is up.
+        wakeUrl: new URL("/wake", backendUrl).toString(),
       },
       { status: 429, headers },
     );

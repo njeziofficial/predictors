@@ -25,7 +25,7 @@ const WakeServerPrompt = ({ wake, className = "" }: { wake: WakeServer; classNam
             {phase === "ask" &&
               "Our host asks for a quick \"I'm human\" check before it starts the server. Tap below, tick the box in the window that opens, and we'll do the rest."}
             {phase === "waiting" &&
-              "Tick the box in the window that opened. Then the server takes up to a minute to start, and we'll carry on by ourselves. If the window stays open afterwards, you can close it."}
+              "Tick the box in the window that opened. Then the server takes up to a minute to start, and we'll close the window and carry on by ourselves."}
             {phase === "blocked" &&
               "Your browser didn't open the window. Open the check in a new tab, tick the box, then come back to this tab."}
           </p>

@@ -183,7 +183,9 @@ async function proxyToBackend(request: Request, env: Env, url: URL, ctx: Executi
     headers.forEach((value, key) => proxied.headers.set(key, value));
     const res = await fetch(proxied);
     if (!isUpgrade && blockedAtEdge(res)) {
-      console.warn(`proxy: ${url.pathname} blocked at Render's edge (${res.status})`);
+      console.warn(
+        `proxy: ${url.pathname} blocked at Render's edge (${res.status}, cf-mitigated=${res.headers.get("cf-mitigated")}, content-type=${res.headers.get("content-type")})`,
+      );
       await res.body?.cancel();
       return edgeBlockedResponse(res, env.BACKEND_URL);
     }

@@ -157,7 +157,7 @@ describe("fetchWithWakeRetry", () => {
     const res = await fetchWithWakeRetry(post, 24, d);
     expect(res.status).toBe(429);
     expect(res.headers.get("retry-after")).toBe("60");
-    expect(await res.json()).toMatchObject({ code: "human_check", wakeUrl: "https://backend.test/" });
+    expect(await res.json()).toMatchObject({ code: "human_check", wakeUrl: "https://backend.test/wake" });
     expect(d.fetch).toHaveBeenCalledTimes(1);
     expect(d.sleep).not.toHaveBeenCalled();
   });

@@ -4,12 +4,36 @@ import { act, renderHook } from "@testing-library/react";
 const checkServer = vi.fn();
 vi.mock("@/lib/api", () => ({ checkServer: () => checkServer() }));
 
-import { ASK_POLL_MS, WAIT_MAX_MS, WAIT_POLL_MS, useWakeServer, type WakeResult } from "@/hooks/useWakeServer";
+vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
+
+import { toast } from "sonner";
+import {
+  ASK_POLL_MS,
+  AWAKE_CHANNEL,
+  WAIT_MAX_MS,
+  WAIT_POLL_MS,
+  useWakeServer,
+  type WakeResult,
+} from "@/hooks/useWakeServer";
 
 const WAKE_URL = "https://backend.test/";
 const down = { state: "down" };
 const check = { state: "human_check", wakeUrl: WAKE_URL };
 const up = { state: "up" };
+
+// Stands in for the channel public/server-awake.html posts on.
+class FakeChannel {
+  onmessage: ((e: { data: unknown }) => void) | null = null;
+  closed = false;
+  constructor(readonly name: string) {
+    channels.push(this);
+  }
+  close() {
+    this.closed = true;
+  }
+}
+const channels: FakeChannel[] = [];
+vi.stubGlobal("BroadcastChannel", FakeChannel);
 
 describe("useWakeServer", () => {
   let popup: { close: ReturnType<typeof vi.fn>; closed: boolean };
@@ -59,6 +83,19 @@ describe("useWakeServer", () => {
       window.dispatchEvent(new Event("focus"));
     });
     expect(result()).toBe("awake");
+  });
+
+  it("checks at once when the check's window says the server is awake", async () => {
+    const { hook, result } = start();
+    act(() => hook.result.current.openCheck());
+    checkServer.mockResolvedValue(up);
+    const listening = channels.find((c) => c.name === AWAKE_CHANNEL && !c.closed);
+    expect(listening).toBeDefined();
+    await act(async () => {
+      listening!.onmessage?.({ data: "awake" });
+    });
+    expect(result()).toBe("awake");
+    expect(toast.success).toHaveBeenCalledWith("The server is awake.");
   });
 
   it("goes on by itself if the server wakes before the player taps", async () => {
